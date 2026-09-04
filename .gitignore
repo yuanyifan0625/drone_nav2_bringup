@@ -1,0 +1,28 @@
+# ROS 2 / colcon outputs
+build/
+install/
+log/
+
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Optional local virtual environments
+.venv/
+venv/
+
+# IDE, editor, and operating-system files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Local ROS state
+.ros/
+
+# Local secrets; commit a non-sensitive .env.example if one is needed later.
+.env
