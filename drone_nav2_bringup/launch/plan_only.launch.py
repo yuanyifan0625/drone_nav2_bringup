@@ -2,6 +2,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
@@ -64,6 +65,11 @@ def generate_launch_description():
         DeclareLaunchArgument("spawn_y", default_value="0.0"),
         DeclareLaunchArgument("spawn_z", default_value="0.0"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("rviz", default_value="true"),
+        DeclareLaunchArgument(
+            "rviz_config",
+            default_value=f"{bringup_share}/rviz/mav1_plan_only.rviz",
+        ),
     ]
 
     map_server = Node(
@@ -168,6 +174,37 @@ def generate_launch_description():
         ],
     )
 
+    plan_goal_bridge = Node(
+        package="drone_nav2_bringup",
+        executable="plan_goal_bridge.py",
+        name="plan_goal_bridge",
+        namespace=vehicle_namespace,
+        output="screen",
+        parameters=[
+            {
+                "use_sim_time": use_sim_time,
+                "vehicle_prefix": vehicle_prefix,
+                "map_frame": map_frame,
+                "base_frame": base_frame,
+                "goal_topic": PythonExpression(["'/", vehicle_prefix, "/goal_pose'"]),
+                "plan_topic": PythonExpression(["'/", vehicle_prefix, "/plan'"]),
+                "planner_action": PythonExpression(
+                    ["'/", vehicle_prefix, "/compute_path_to_pose'"]
+                ),
+            }
+        ],
+    )
+
+    rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=["-d", LaunchConfiguration("rviz_config")],
+        parameters=[{"use_sim_time": use_sim_time}],
+        condition=IfCondition(LaunchConfiguration("rviz")),
+    )
+
     return LaunchDescription(
         arguments
         + [
@@ -192,5 +229,7 @@ def generate_launch_description():
             px4_odometry_bridge,
             planner_server,
             planner_lifecycle_manager,
+            plan_goal_bridge,
+            rviz,
         ]
     )

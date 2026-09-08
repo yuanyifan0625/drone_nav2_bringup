@@ -30,6 +30,8 @@ import unittest
 class PlanOnlyLaunchTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Keep this self-contained launch separate from any active MAV1/SITL graph.
+        os.environ["ROS_DOMAIN_ID"] = "102"
         cls.launch_process = subprocess.Popen(
             [
                 "ros2",
@@ -37,7 +39,9 @@ class PlanOnlyLaunchTest(unittest.TestCase):
                 "drone_nav2_bringup",
                 "plan_only.launch.py",
                 "use_sim_time:=false",
+                "rviz:=false",
             ],
+            env=os.environ.copy(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -119,7 +123,9 @@ class PlanOnlyLaunchTest(unittest.TestCase):
         deadline = time.monotonic() + 15.0
         while time.monotonic() < deadline:
             request_future = state_client.call_async(GetState.Request())
-            cls.spin_and_publish_until(request_future.done, timeout=2.0)
+            # Planner activation waits for the first MAV1/base_link TF.  Give
+            # DDS discovery and the PX4 mock publisher enough time to establish it.
+            cls.spin_and_publish_until(request_future.done, timeout=5.0)
             if request_future.result().current_state.id == State.PRIMARY_STATE_ACTIVE:
                 return
         raise AssertionError("Lifecycle node did not become active")

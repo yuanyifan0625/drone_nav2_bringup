@@ -1,6 +1,7 @@
 """Behavioural contract for MAV1 PX4-local-position conversion."""
 
 import math
+import os
 from types import SimpleNamespace
 import time
 import unittest
@@ -64,6 +65,8 @@ class LocalPositionToEnuTest(unittest.TestCase):
 class Px4OdometryBridgeRosTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Do not attach to an operator's active MAV1/SITL graph during tests.
+        os.environ["ROS_DOMAIN_ID"] = "101"
         rclpy.init()
 
     @classmethod
