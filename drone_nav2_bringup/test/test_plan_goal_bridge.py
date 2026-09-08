@@ -1,8 +1,10 @@
 """End-to-end contract for the MAV1 Plan Goal Bridge."""
 
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid, Path
 import math
+from pathlib import Path as FilePath
 from px4_msgs.msg import VehicleLocalPosition
 import os
 import rclpy
@@ -13,6 +15,7 @@ import subprocess
 import time
 from tf2_msgs.msg import TFMessage
 import unittest
+from visualization_msgs.msg import MarkerArray
 
 
 class PlanGoalBridgeTest(unittest.TestCase):
@@ -30,7 +33,16 @@ class PlanGoalBridgeTest(unittest.TestCase):
         # Keep this self-contained launch separate from any active MAV1/SITL graph.
         os.environ["ROS_DOMAIN_ID"] = "103"
         cls.launch_process = subprocess.Popen(
-            ["ros2", "launch", "drone_nav2_bringup", "plan_only.launch.py", "use_sim_time:=false", "rviz:=false"],
+            [
+                "ros2",
+                "launch",
+                "drone_nav2_bringup",
+                "plan_only.launch.py",
+                "use_sim_time:=false",
+                "rviz:=false",
+                "spawn_x:=1.0",
+                "spawn_y:=-6.5",
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -45,6 +57,9 @@ class PlanGoalBridgeTest(unittest.TestCase):
         cls.maps = []
         cls.tf_messages = []
         cls.static_tf_messages = []
+        cls.arena_walls = []
+        cls.route_graphs = []
+        cls.vehicle_markers = []
         cls.node.create_subscription(
             Path, "/MAV1/plan", cls.plans.append, cls.persistent_plan_qos()
         )
@@ -63,6 +78,21 @@ class PlanGoalBridgeTest(unittest.TestCase):
             "/tf_static",
             cls.static_tf_messages.append,
             cls.persistent_plan_qos(),
+        )
+        cls.node.create_subscription(
+            MarkerArray,
+            "/arena_walls",
+            cls.arena_walls.append,
+            cls.persistent_plan_qos(),
+        )
+        cls.node.create_subscription(
+            MarkerArray,
+            "/route_graph",
+            cls.route_graphs.append,
+            cls.persistent_plan_qos(),
+        )
+        cls.node.create_subscription(
+            MarkerArray, "/vehicle_marker", cls.vehicle_markers.append, 10
         )
 
     @classmethod
@@ -147,7 +177,7 @@ class PlanGoalBridgeTest(unittest.TestCase):
         for topic in forbidden_topics:
             self.assertEqual(self.node.get_publishers_info_by_topic(topic), [])
 
-        self.goal_publisher.publish(self.goal("map", 1.0, -6.5))
+        self.goal_publisher.publish(self.goal("map", -2.0, 0.0))
         self.spin_with_pose_until(lambda: self.plans and len(self.plans[-1].poses) > 1)
         self.assertEqual(self.plans[-1].header.frame_id, "map")
         self.assertTrue(self.maps)
@@ -181,8 +211,55 @@ class PlanGoalBridgeTest(unittest.TestCase):
         late_observer.destroy_node()
         self.assertTrue(late_plans and len(late_plans[-1].poses) > 1)
 
-        self.goal_publisher.publish(self.goal("MAV1/odom", 1.0, -6.5))
+        self.goal_publisher.publish(self.goal("MAV1/odom", -2.0, 0.0))
         self.spin_with_pose_until(lambda: self.plans and not self.plans[-1].poses)
+
+    def test_plan_only_launch_publishes_arena_marker_layers(self):
+        self.wait_for_graph_ready()
+        self.spin_with_pose_until(
+            lambda: self.arena_walls
+            and self.arena_walls[-1].markers
+            and self.route_graphs
+            and self.route_graphs[-1].markers
+            and self.vehicle_markers
+            and self.vehicle_markers[-1].markers
+        )
+        vehicle_body = next(
+            marker
+            for marker in self.vehicle_markers[-1].markers
+            if marker.ns == "drone" and marker.id == 0
+        )
+        map_to_odom = next(
+            transform
+            for message in self.static_tf_messages
+            for transform in message.transforms
+            if transform.header.frame_id == "map"
+            and transform.child_frame_id == "MAV1/odom"
+        )
+        self.assertAlmostEqual(
+            vehicle_body.pose.position.x, map_to_odom.transform.translation.x
+        )
+        self.assertAlmostEqual(
+            vehicle_body.pose.position.y, map_to_odom.transform.translation.y
+        )
+
+    def test_integrated_rviz_config_declares_all_visual_layers(self):
+        config_path = (
+            FilePath(get_package_share_directory("drone_nav2_bringup"))
+            / "rviz"
+            / "mav1_plan_only.rviz"
+        )
+        config = config_path.read_text(encoding="utf-8")
+        for topic in (
+            "/map",
+            "/arena_walls",
+            "/route_graph",
+            "/vehicle_marker",
+            "/MAV1/plan",
+            "/MAV1/goal_pose",
+        ):
+            self.assertIn(topic, config)
+        self.assertIn("Fixed Frame: map", config)
 
 
 if __name__ == "__main__":

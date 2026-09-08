@@ -5,7 +5,7 @@ from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
-from launch_ros.descriptions import ParameterFile
+from launch_ros.descriptions import ParameterFile, ParameterValue
 from nav2_common.launch import RewrittenYaml
 
 from ament_index_python.packages import get_package_share_directory
@@ -65,7 +65,7 @@ def generate_launch_description():
         DeclareLaunchArgument("spawn_y", default_value="0.0"),
         DeclareLaunchArgument("spawn_z", default_value="0.0"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
-        DeclareLaunchArgument("rviz", default_value="true"),
+        DeclareLaunchArgument("rviz", default_value="false"),
         DeclareLaunchArgument(
             "rviz_config",
             default_value=f"{bringup_share}/rviz/mav1_plan_only.rviz",
@@ -151,6 +151,7 @@ def generate_launch_description():
         name="planner_server",
         namespace=vehicle_namespace,
         output="screen",
+        remappings=[("plan", "planner_debug_plan")],
         parameters=[
             planner_params,
             {
@@ -195,6 +196,29 @@ def generate_launch_description():
         ],
     )
 
+    arena_markers = Node(
+        package="drone_nav2_apriltag",
+        executable="graph_markers.py",
+        name="graph_markers",
+        output="screen",
+        parameters=[
+            {
+                "use_sim_time": use_sim_time,
+                "world_file": f"{arena_share}/gz/worlds/nav2_arena.sdf",
+                "graph_file": f"{arena_share}/graphs/nav2_arena.geojson",
+                "frame_id": map_frame,
+                "px4_namespace": PythonExpression(["'/", vehicle_prefix, "'"]),
+                "track_vehicle": True,
+                "origin_x": ParameterValue(
+                    LaunchConfiguration("spawn_x"), value_type=float
+                ),
+                "origin_y": ParameterValue(
+                    LaunchConfiguration("spawn_y"), value_type=float
+                ),
+            }
+        ],
+    )
+
     rviz = Node(
         package="rviz2",
         executable="rviz2",
@@ -230,6 +254,7 @@ def generate_launch_description():
             planner_server,
             planner_lifecycle_manager,
             plan_goal_bridge,
+            arena_markers,
             rviz,
         ]
     )

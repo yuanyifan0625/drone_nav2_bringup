@@ -28,6 +28,23 @@ artifacts. They are not source assets and must not be committed.
   and the future Plan Goal Bridge.
 - `drone_px4_nav2_bridge`: PX4-to-ROS coordinate and message conversion.
 
-The repository bootstrap deliberately contains no PX4 control path, Nav2
-planner launch, or flight-command publisher. Those capabilities are added by
-later tickets.
+## Integrated RViz and arena markers
+
+`plan_only.launch.py` keeps RViz disabled by default. After launching
+Plan-Only, start one Integrated RViz manually with the package's RViz config.
+It overlays the Static Occupancy Map, arena walls, route graph, MAV1 TF, the
+MAV1 global plan, and the PX4-derived vehicle marker in the shared `map` frame.
+
+Plan-Only starts the arena package's Arena Marker Publisher
+(`graph_markers.py`). It reads the arena SDF and GeoJSON to publish
+`/arena_walls` and `/route_graph`; it also derives `/vehicle_marker` from PX4
+local position. These markers are visualization and Coordinate Cross-Check
+assets: compare the PX4-derived marker with `MAV1/base_link` TF and
+`/MAV1/plan` to expose NED-to-ENU or origin-alignment disagreement. They are
+not a Nav2 map, localization source, planner input, or vehicle-control path.
+
+```bash
+rviz2 -d "$(ros2 pkg prefix drone_nav2_bringup)/share/drone_nav2_bringup/rviz/mav1_plan_only.rviz"
+```
+
+Plan-Only still has no PX4 control path or flight-command publisher.
