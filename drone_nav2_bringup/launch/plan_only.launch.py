@@ -64,7 +64,7 @@ def generate_launch_description():
         DeclareLaunchArgument("spawn_x", default_value="-2.0"),
         DeclareLaunchArgument("spawn_y", default_value="0.0"),
         DeclareLaunchArgument("spawn_z", default_value="0.0"),
-        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("rviz", default_value="false"),
         DeclareLaunchArgument(
             "rviz_config",
