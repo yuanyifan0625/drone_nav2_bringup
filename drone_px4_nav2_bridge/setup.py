@@ -20,6 +20,8 @@ setup(
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
-        "console_scripts": [],
+        "console_scripts": [
+            "px4_odometry_bridge = drone_px4_nav2_bridge.px4_odometry_bridge:main",
+        ],
     },
 )
