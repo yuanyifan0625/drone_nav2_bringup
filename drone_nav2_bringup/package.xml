@@ -11,9 +11,24 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_navfn_planner</exec_depend>
+  <exec_depend>nav2_planner</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>drone_nav2_apriltag</exec_depend>
+  <exec_depend>drone_px4_nav2_bridge</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>action_msgs</test_depend>
+  <test_depend>lifecycle_msgs</test_depend>
+  <test_depend>nav2_msgs</test_depend>
+  <test_depend>px4_msgs</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>rcl_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
