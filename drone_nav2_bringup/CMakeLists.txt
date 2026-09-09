@@ -9,7 +9,10 @@ install(
 )
 
 install(
-  PROGRAMS scripts/plan_goal_bridge.py
+  PROGRAMS
+    scripts/mav1_offboard_mission_manager.py
+    scripts/plan_goal_bridge.py
+    scripts/print_mav1_offboard_sitl_validation.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -30,6 +33,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_control_only_launch test/test_control_only_launch.py
     ENV ROS_DOMAIN_ID=106
+  )
+  ament_add_pytest_test(
+    test_mav1_offboard_mission_launch test/test_mav1_offboard_mission_launch.py
+    ENV ROS_DOMAIN_ID=109
   )
 endif()
 

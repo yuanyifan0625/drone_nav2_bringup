@@ -21,6 +21,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
+            "cmd_vel_to_px4_offboard_bridge = "
+            "drone_px4_nav2_bridge.cmd_vel_to_px4_offboard_bridge:main",
             "px4_odometry_bridge = drone_px4_nav2_bridge.px4_odometry_bridge:main",
         ],
     },
