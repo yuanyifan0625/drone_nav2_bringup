@@ -4,7 +4,7 @@ project(drone_nav2_bringup)
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch config rviz
+  DIRECTORY behavior_trees launch config rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -26,6 +26,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_plan_only_sim_time_launch test/test_plan_only_sim_time_launch.py
     ENV ROS_DOMAIN_ID=104
+  )
+  ament_add_pytest_test(
+    test_control_only_launch test/test_control_only_launch.py
+    ENV ROS_DOMAIN_ID=106
   )
 endif()
 
