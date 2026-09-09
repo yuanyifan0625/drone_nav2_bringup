@@ -20,7 +20,16 @@ from visualization_msgs.msg import MarkerArray
 
 class PlanGoalBridgeTest(unittest.TestCase):
     @staticmethod
-    def persistent_plan_qos():
+    def native_plan_qos():
+        return QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.VOLATILE,
+        )
+
+    @staticmethod
+    def persistent_qos():
         return QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
@@ -61,10 +70,10 @@ class PlanGoalBridgeTest(unittest.TestCase):
         cls.route_graphs = []
         cls.vehicle_markers = []
         cls.node.create_subscription(
-            Path, "/MAV1/plan", cls.plans.append, cls.persistent_plan_qos()
+            Path, "/MAV1/plan", cls.plans.append, cls.native_plan_qos()
         )
         cls.node.create_subscription(
-            OccupancyGrid, "/map", cls.maps.append, cls.persistent_plan_qos()
+            OccupancyGrid, "/map", cls.maps.append, cls.persistent_qos()
         )
         tf_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -77,19 +86,19 @@ class PlanGoalBridgeTest(unittest.TestCase):
             TFMessage,
             "/tf_static",
             cls.static_tf_messages.append,
-            cls.persistent_plan_qos(),
+            cls.persistent_qos(),
         )
         cls.node.create_subscription(
             MarkerArray,
             "/arena_walls",
             cls.arena_walls.append,
-            cls.persistent_plan_qos(),
+            cls.persistent_qos(),
         )
         cls.node.create_subscription(
             MarkerArray,
             "/route_graph",
             cls.route_graphs.append,
-            cls.persistent_plan_qos(),
+            cls.persistent_qos(),
         )
         cls.node.create_subscription(
             MarkerArray, "/vehicle_marker", cls.vehicle_markers.append, 10
@@ -133,7 +142,7 @@ class PlanGoalBridgeTest(unittest.TestCase):
         goal.pose.orientation.w = 1.0
         return goal
 
-    def test_map_goal_publishes_path_and_invalid_goal_clears_it(self):
+    def test_map_goal_has_native_planner_path_and_bridge_never_publishes_path(self):
         self.wait_for_graph_ready()
         self.spin_with_pose_until(
             lambda: any(
@@ -159,13 +168,20 @@ class PlanGoalBridgeTest(unittest.TestCase):
                 for transform in message.transforms
             )
         )
-        publisher_topics = {
+        bridge_publisher_topics = {
             topic_name
             for topic_name, _ in self.node.get_publisher_names_and_types_by_node(
                 "plan_goal_bridge", "/MAV1"
             )
         }
-        self.assertIn("/MAV1/plan", publisher_topics)
+        planner_publisher_topics = {
+            topic_name
+            for topic_name, _ in self.node.get_publisher_names_and_types_by_node(
+                "planner_server", "/MAV1"
+            )
+        }
+        self.assertIn("/MAV1/plan", planner_publisher_topics)
+        self.assertNotIn("/MAV1/plan", bridge_publisher_topics)
         forbidden_topics = {
             "/cmd_vel",
             "/MAV1/cmd_vel",
@@ -173,7 +189,7 @@ class PlanGoalBridgeTest(unittest.TestCase):
             "/MAV1/fmu/in/trajectory_setpoint",
             "/MAV1/fmu/in/vehicle_command",
         }
-        self.assertTrue(forbidden_topics.isdisjoint(publisher_topics))
+        self.assertTrue(forbidden_topics.isdisjoint(bridge_publisher_topics))
         for topic in forbidden_topics:
             self.assertEqual(self.node.get_publishers_info_by_topic(topic), [])
 
@@ -200,19 +216,18 @@ class PlanGoalBridgeTest(unittest.TestCase):
                 occupancy_map.data[row * occupancy_map.info.width + column], 0
             )
 
-        late_observer = Node("late_plan_observer")
-        late_plans = []
-        late_observer.create_subscription(
-            Path, "/MAV1/plan", late_plans.append, self.persistent_plan_qos()
-        )
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline and not late_plans:
-            rclpy.spin_once(late_observer, timeout_sec=0.05)
-        late_observer.destroy_node()
-        self.assertTrue(late_plans and len(late_plans[-1].poses) > 1)
-
+        plan_count = len(self.plans)
         self.goal_publisher.publish(self.goal("MAV1/odom", -2.0, 0.0))
-        self.spin_with_pose_until(lambda: self.plans and not self.plans[-1].poses)
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        self.assertEqual(len(self.plans), plan_count)
+
+        self.goal_publisher.publish(self.goal("map", 100.0, 100.0))
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        self.assertEqual(len(self.plans), plan_count)
 
     def test_plan_only_launch_publishes_arena_marker_layers(self):
         self.wait_for_graph_ready()

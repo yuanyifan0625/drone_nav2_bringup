@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""Bridge MAV1 RViz goals to Nav2 planning and a persistent display path."""
+"""Bridge MAV1 RViz goals to Nav2 ComputePathToPose requests."""
 
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import ComputePathToPose
-from nav_msgs.msg import Path
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
 
 class PlanGoalBridge(Node):
-    """Accept map-frame goals and publish only the newest successful MAV1 plan."""
+    """Adapt map-frame RViz goals into MAV1 planner action requests."""
 
     def __init__(self):
         super().__init__("plan_goal_bridge")
@@ -27,18 +25,10 @@ class PlanGoalBridge(Node):
         goal_topic = self.declare_parameter(
             "goal_topic", f"/{vehicle_prefix}/goal_pose"
         ).value
-        plan_topic = self.declare_parameter("plan_topic", f"/{vehicle_prefix}/plan").value
         planner_action = self.declare_parameter(
             "planner_action", f"/{vehicle_prefix}/compute_path_to_pose"
         ).value
 
-        plan_qos = QoSProfile(
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-        )
-        self._plan_publisher = self.create_publisher(Path, plan_topic, plan_qos)
         self._goal_subscription = self.create_subscription(
             PoseStamped, goal_topic, self._on_goal, 10
         )
@@ -48,19 +38,12 @@ class PlanGoalBridge(Node):
         self._request_number = 0
         self._active_goal_handle = None
         self.get_logger().info(
-            f"Bridging {goal_topic} to {planner_action} and publishing {plan_topic}"
+            f"Bridging {goal_topic} to {planner_action}"
         )
-
-    def _clear_plan(self):
-        empty_path = Path()
-        empty_path.header.frame_id = self._map_frame
-        empty_path.header.stamp = self.get_clock().now().to_msg()
-        self._plan_publisher.publish(empty_path)
 
     def _on_goal(self, goal):
         self._request_number += 1
         request_number = self._request_number
-        self._clear_plan()
 
         if goal.header.frame_id != self._map_frame:
             self.get_logger().error(
@@ -103,7 +86,6 @@ class PlanGoalBridge(Node):
             return
         if not goal_handle.accepted:
             self.get_logger().error("Planner rejected goal")
-            self._clear_plan()
             return
         self._active_goal_handle = goal_handle
         result_future = goal_handle.get_result_async()
@@ -116,11 +98,9 @@ class PlanGoalBridge(Node):
             return
         self._active_goal_handle = None
         result = result_future.result()
-        if result.status != GoalStatus.STATUS_SUCCEEDED or not result.result.path.poses:
+        if result.status != GoalStatus.STATUS_SUCCEEDED:
             self.get_logger().error(f"Planner failed with action status {result.status}")
-            self._clear_plan()
             return
-        self._plan_publisher.publish(result.result.path)
 
 
 def main(args=None):

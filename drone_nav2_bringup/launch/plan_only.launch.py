@@ -151,7 +151,6 @@ def generate_launch_description():
         name="planner_server",
         namespace=vehicle_namespace,
         output="screen",
-        remappings=[("plan", "planner_debug_plan")],
         parameters=[
             planner_params,
             {
@@ -188,7 +187,6 @@ def generate_launch_description():
                 "map_frame": map_frame,
                 "base_frame": base_frame,
                 "goal_topic": PythonExpression(["'/", vehicle_prefix, "/goal_pose'"]),
-                "plan_topic": PythonExpression(["'/", vehicle_prefix, "/plan'"]),
                 "planner_action": PythonExpression(
                     ["'/", vehicle_prefix, "/compute_path_to_pose'"]
                 ),
