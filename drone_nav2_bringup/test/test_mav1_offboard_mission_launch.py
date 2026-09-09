@@ -53,6 +53,9 @@ class Mav1OffboardMissionLaunchTest(unittest.TestCase):
         cls.goal_publisher = cls.node.create_publisher(
             PoseStamped, "/MAV1/mission_goal", 10
         )
+        cls.formation_goal_publisher = cls.node.create_publisher(
+            PoseStamped, "/MAV1/formation_goal_pose", 10
+        )
         cls.cancel_publisher = cls.node.create_publisher(
             Empty, "/MAV1/mission_cancel", 10
         )
@@ -92,6 +95,18 @@ class Mav1OffboardMissionLaunchTest(unittest.TestCase):
                 return
         raise AssertionError("MAV1 mission launch did not satisfy its public contract")
 
+    @classmethod
+    def spin_with_position_for(cls, duration):
+        position = VehicleLocalPosition()
+        position.xy_valid = True
+        position.z_valid = True
+        position.v_xy_valid = True
+        position.v_z_valid = True
+        deadline = time.monotonic() + duration
+        while time.monotonic() < deadline:
+            cls.position_publisher.publish(position)
+            rclpy.spin_once(cls.node, timeout_sec=0.05)
+
     def test_cancel_enters_abort_hold_before_px4_land(self):
         self.spin_with_position_until(
             lambda: any(message.data == "idle" for message in self.phases)
@@ -101,7 +116,7 @@ class Mav1OffboardMissionLaunchTest(unittest.TestCase):
         goal.pose.position.x = 1.0
         goal.pose.position.y = -6.5
         goal.pose.orientation.w = 1.0
-        self.goal_publisher.publish(goal)
+        self.formation_goal_publisher.publish(goal)
         self.spin_with_position_until(
             lambda: any(message.data == "takeoff" for message in self.phases)
         )
@@ -114,6 +129,16 @@ class Mav1OffboardMissionLaunchTest(unittest.TestCase):
         self.assertTrue(
             any(setpoint.position[2] == -3.0 for setpoint in self.setpoints)
         )
+        phase_count_before_replacement = len(self.phases)
+        replacement_goal = PoseStamped()
+        replacement_goal.header.frame_id = "map"
+        replacement_goal.pose.position.x = 6.5
+        replacement_goal.pose.position.y = -6.5
+        replacement_goal.pose.orientation.w = 1.0
+        self.goal_publisher.publish(replacement_goal)
+        self.spin_with_position_for(0.5)
+        self.assertEqual(phase_count_before_replacement, len(self.phases))
+        self.assertEqual("takeoff", self.phases[-1].data)
         self.cancel_publisher.publish(Empty())
         self.spin_with_position_until(
             lambda: any(message.data == "abort_hold" for message in self.phases)

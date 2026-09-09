@@ -12,6 +12,7 @@ def generate_launch_description():
     """Start MAV1 Nav2 control, mission lifecycle and the sole PX4 interface."""
 
     bringup_share = get_package_share_directory("drone_nav2_bringup")
+    arena_share = get_package_share_directory("drone_nav2_apriltag")
     vehicle_namespace = LaunchConfiguration("vehicle_namespace")
     vehicle_prefix = LaunchConfiguration("vehicle_prefix")
     flight_level = LaunchConfiguration("flight_level")
@@ -31,6 +32,10 @@ def generate_launch_description():
             "gazebo_clock_topic", default_value="/world/nav2_arena/clock"
         ),
         DeclareLaunchArgument("rviz", default_value="false"),
+        DeclareLaunchArgument(
+            "rviz_config",
+            default_value=f"{bringup_share}/rviz/mav1_offboard_mission.rviz",
+        ),
     ]
 
     control_only = IncludeLaunchDescription(
@@ -44,7 +49,23 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "gazebo_clock_topic": LaunchConfiguration("gazebo_clock_topic"),
             "rviz": LaunchConfiguration("rviz"),
+            "rviz_config": LaunchConfiguration("rviz_config"),
         }.items(),
+    )
+    formation_goal_adapter = Node(
+        package="drone_nav2_bringup",
+        executable="formation_goal_adapter.py",
+        name="formation_goal_adapter",
+        namespace=vehicle_namespace,
+        output="screen",
+        parameters=[
+            {
+                "vehicle_namespace": vehicle_namespace,
+                "map_frame": "map",
+                "graph_file": f"{arena_share}/graphs/nav2_arena.geojson",
+                "use_sim_time": use_sim_time,
+            }
+        ],
     )
     mission_params = f"{bringup_share}/config/mav1_offboard_mission.yaml"
     mission_manager = Node(
@@ -79,4 +100,6 @@ def generate_launch_description():
         ],
     )
 
-    return LaunchDescription(arguments + [control_only, mission_manager, px4_interface])
+    return LaunchDescription(
+        arguments + [control_only, formation_goal_adapter, mission_manager, px4_interface]
+    )
