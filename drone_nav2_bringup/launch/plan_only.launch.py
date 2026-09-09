@@ -25,6 +25,7 @@ def generate_launch_description():
     odom_topic = LaunchConfiguration("odom_topic")
     planner_plugin = LaunchConfiguration("planner_plugin")
     use_sim_time = LaunchConfiguration("use_sim_time")
+    gazebo_clock_topic = LaunchConfiguration("gazebo_clock_topic")
     odom_frame = PythonExpression(["'", vehicle_prefix, "/odom'"])
     base_frame = PythonExpression(["'", vehicle_prefix, "/base_link'"])
 
@@ -65,6 +66,9 @@ def generate_launch_description():
         DeclareLaunchArgument("spawn_y", default_value="0.0"),
         DeclareLaunchArgument("spawn_z", default_value="0.0"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
+        DeclareLaunchArgument(
+            "gazebo_clock_topic", default_value="/world/nav2_arena/clock"
+        ),
         DeclareLaunchArgument("rviz", default_value="false"),
         DeclareLaunchArgument(
             "rviz_config",
@@ -85,6 +89,24 @@ def generate_launch_description():
                 "frame_id": map_frame,
             }
         ],
+    )
+
+    gazebo_clock_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        name="gazebo_clock_bridge",
+        output="screen",
+        arguments=[
+            PythonExpression(
+                [
+                    "'",
+                    gazebo_clock_topic,
+                    "@rosgraph_msgs/msg/Clock[gz.msgs.Clock'",
+                ]
+            )
+        ],
+        remappings=[(gazebo_clock_topic, "/clock")],
+        condition=IfCondition(use_sim_time),
     )
 
     map_lifecycle_manager = Node(
@@ -245,6 +267,7 @@ def generate_launch_description():
                     "). Replace this publisher with SLAM or AprilTag localization later.",
                 ]
             ),
+            gazebo_clock_bridge,
             map_server,
             map_lifecycle_manager,
             static_map_to_odom,

@@ -23,6 +23,10 @@ if(BUILD_TESTING)
     test_plan_goal_bridge test/test_plan_goal_bridge.py
     ENV ROS_DOMAIN_ID=103
   )
+  ament_add_pytest_test(
+    test_plan_only_sim_time_launch test/test_plan_only_sim_time_launch.py
+    ENV ROS_DOMAIN_ID=104
+  )
 endif()
 
 ament_package()
