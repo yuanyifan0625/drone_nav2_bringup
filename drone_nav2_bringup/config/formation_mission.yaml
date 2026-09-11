@@ -1,0 +1,15 @@
+formation_mission_manager:
+  ros__parameters:
+    flight_level: 3.0
+    height_tolerance: 0.15
+    slot_tolerance: 0.25
+    slot_convergence_seconds: 3.0
+    abort_slot_error: 2.0
+    minimum_separation: 0.7
+    warmup_seconds: 1.0
+    abort_hold_seconds: 2.0
+    telemetry_timeout: 0.5
+    mav2_slot_forward: -0.8
+    mav2_slot_left: 0.8
+    mav3_slot_forward: -0.8
+    mav3_slot_left: -0.8

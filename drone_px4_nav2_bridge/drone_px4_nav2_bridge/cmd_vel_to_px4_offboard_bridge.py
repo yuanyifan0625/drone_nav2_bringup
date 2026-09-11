@@ -126,7 +126,8 @@ class CmdVelToPx4OffboardBridge(Node):
     def _on_phase(self, message: String) -> None:
         phase = message.data.strip().lower()
         if phase not in {
-            "idle", "preflight", "warmup", "takeoff", "navigate", "abort_hold", "land"
+            "idle", "preflight", "warmup", "takeoff", "takeoff_all", "form_up",
+            "navigate", "navigate_leader", "abort_hold", "land", "land_all",
         }:
             self.get_logger().warn(f"Ignoring unknown mission phase: {message.data}")
             return
@@ -137,28 +138,30 @@ class CmdVelToPx4OffboardBridge(Node):
         if phase == "warmup":
             self._offboard_requested = False
             self._land_requested = False
-        if phase == "takeoff" and self._latest_position is not None:
+        if phase in {"takeoff", "takeoff_all"} and self._latest_position is not None:
             self._takeoff_xy = (self._latest_position.x, self._latest_position.y)
         if phase == "abort_hold" and self._latest_position is not None:
             self._hold_xy = (self._latest_position.x, self._latest_position.y)
-        if phase == "land":
+        if phase in {"land", "land_all"}:
             self._land_requested = False
 
     def _tick(self) -> None:
         if self._phase in {"idle", "preflight"} or self._latest_position is None:
             return
-        if self._phase == "land":
+        if self._phase in {"land", "land_all"}:
             if not self._land_requested:
                 self._publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
                 self._land_requested = True
             return
 
-        self._publish_heartbeat(velocity=self._phase == "navigate")
+        self._publish_heartbeat(
+            velocity=self._phase in {"form_up", "navigate", "navigate_leader"}
+        )
         if self._phase == "warmup":
             self._publish_position_hold(self._latest_position.x, self._latest_position.y, self._latest_position.z)
             return
 
-        if self._phase == "takeoff":
+        if self._phase in {"takeoff", "takeoff_all"}:
             elapsed_s = (self.get_clock().now().nanoseconds - self._phase_started_ns) / 1e9
             if not self._offboard_requested and elapsed_s >= self._warmup_seconds:
                 self._publish_vehicle_command(

@@ -25,4 +25,9 @@ venv/
 .ros/
 
 # Local secrets; commit a non-sensitive .env.example if one is needed later.
-.env
+#.env
+
+docs/
+# Local agent / AI context
+AGENTS.md
+CONTEXT.md
