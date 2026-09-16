@@ -56,7 +56,8 @@ ros2 topic echo /MAV2/cmd_vel
 ros2 topic echo /MAV3/cmd_vel
 
 [5] 終端 E 或 RViz：選擇一個 Formation Goal。每次任務完成、狀態回到 idle 後，
-才可送下一個目標。方式 A（GeoJSON node ID，重送三次可避開 DDS discovery 時序）：
+才可送下一個目標。
+方式 A（GeoJSON node ID，重送三次可避開 DDS discovery 時序）：
 ros2 topic pub --times 3 -r 2 /MAV1/formation_goal_node_id std_msgs/msg/Int32 "{data: 4}"
 方式 B（直接模擬 RViz 的座標 Goal；不開 GUI 時使用）：
 ros2 topic pub --once /MAV1/formation_goal_pose geometry_msgs/msg/PoseStamped "{header: {frame_id: map}, pose: {position: {x: 6.5, y: -6.5, z: 0.0}, orientation: {w: 1.0}}}"
@@ -90,4 +91,5 @@ ros2 topic info /MAV2/cmd_vel
 ros2 topic info /MAV3/cmd_vel
 觀察：
 三個確認指令都顯示「Unknown topic」，表示 Formation Mission runtime 已清除。
+pgrep -af '[M]icroXRCEAgent|[b]uild/px4_sitl_default/bin/px4|[g]z sim|[g]zserver|[r]os2 (launch|run)'
 EOF
