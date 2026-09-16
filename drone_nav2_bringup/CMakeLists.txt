@@ -12,6 +12,7 @@ install(
   PROGRAMS
     scripts/formation_goal_adapter.py
     scripts/fixed_slot_follower_controller.py
+    scripts/depth_sensor_adapter.py
     scripts/formation_mission_manager.py
     scripts/mav1_offboard_mission_manager.py
     scripts/plan_goal_bridge.py

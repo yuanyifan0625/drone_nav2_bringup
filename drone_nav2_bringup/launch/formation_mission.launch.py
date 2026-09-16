@@ -118,6 +118,12 @@ def generate_launch_description():
             "rviz_config": f"{bringup_share}/rviz/mav1_offboard_mission.rviz",
         }.items(),
     )
+    depth_sensors = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            f"{bringup_share}/launch/depth_sensors.launch.py"
+        ),
+        launch_arguments={"use_sim_time": use_sim_time}.items(),
+    )
     manager = Node(
         package="drone_nav2_bringup",
         executable="formation_mission_manager.py",
@@ -172,6 +178,7 @@ def generate_launch_description():
             DeclareLaunchArgument("gazebo_clock_topic", default_value="/world/nav2_arena/clock"),
             DeclareLaunchArgument("rviz", default_value="false"),
             leader_control,
+            depth_sensors,
             *_follower_odometry_and_tf(
                 bringup_share=bringup_share, vehicle_namespace="MAV2", spawn_x="-2.0", spawn_y="3.0"
             ),
