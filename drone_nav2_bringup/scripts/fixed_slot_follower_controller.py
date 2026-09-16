@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Track one yaw-relative Fixed V-Slot and publish vehicle-scoped FLU cmd_vel."""
+"""Track one yaw-relative Fixed V-Slot and publish its target pose."""
 
 from __future__ import annotations
 
@@ -154,6 +154,9 @@ class FixedSlotFollowerController(Node):
         self._telemetry_timeout = float(
             self.declare_parameter("telemetry_timeout", 0.5).value
         )
+        self._publish_cmd_vel = bool(
+            self.declare_parameter("publish_cmd_vel", True).value
+        )
         self._phase = "idle"
         self._leader_odom: Odometry | None = None
         self._follower_odom: Odometry | None = None
@@ -172,7 +175,11 @@ class FixedSlotFollowerController(Node):
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
-        self._publisher = self.create_publisher(Twist, f"/{vehicle_namespace}/cmd_vel", reliable_qos)
+        self._publisher = (
+            self.create_publisher(Twist, f"/{vehicle_namespace}/cmd_vel", reliable_qos)
+            if self._publish_cmd_vel
+            else None
+        )
         self._target_publisher = self.create_publisher(
             PoseStamped, f"/{vehicle_namespace}/formation_target_pose", reliable_qos
         )
@@ -213,7 +220,8 @@ class FixedSlotFollowerController(Node):
             and self._telemetry_is_fresh(self._leader_received_ns)
             and self._telemetry_is_fresh(self._follower_received_ns)
         ):
-            self._publisher.publish(command)
+            if self._publisher is not None:
+                self._publisher.publish(command)
             return
 
         leader_position = self._leader_odom.pose.pose.position
@@ -256,7 +264,8 @@ class FixedSlotFollowerController(Node):
             follower_y=follower_position.y,
             minimum_leader_distance=self._minimum_leader_distance,
         )
-        self._publisher.publish(command)
+        if self._publisher is not None:
+            self._publisher.publish(command)
 
 
 def main(args=None) -> None:

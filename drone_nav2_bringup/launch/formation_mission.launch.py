@@ -6,6 +6,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from nav2_common.launch import RewrittenYaml
 
 
 def _follower_odometry_and_tf(
@@ -67,7 +68,9 @@ def _px4_bridge(vehicle_namespace: str, target_system: int) -> Node:
     )
 
 
-def _follower_controller(vehicle_namespace: str, slot_forward, slot_left) -> Node:
+def _follower_controller(
+    vehicle_namespace: str, slot_forward, slot_left, publish_cmd_vel: bool
+) -> Node:
     """Create one vehicle-scoped Fixed V-Slot controller."""
 
     return Node(
@@ -88,10 +91,43 @@ def _follower_controller(vehicle_namespace: str, slot_forward, slot_left) -> Nod
                 "max_yaw_rate": LaunchConfiguration("follower_max_yaw_rate"),
                 "minimum_leader_distance": LaunchConfiguration("minimum_leader_distance"),
                 "telemetry_timeout": LaunchConfiguration("telemetry_timeout"),
+                "publish_cmd_vel": publish_cmd_vel,
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
             }
         ],
     )
+
+
+def _mav2_local_control(bringup_share: str):
+    """Return MAV2's sole local controller, owner, and moving-path adapter."""
+
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    mppi_parameters = RewrittenYaml(
+        source_file=f"{bringup_share}/config/mav2_follower_mppi.yaml",
+        root_key="MAV2",
+        param_rewrites={"use_sim_time": use_sim_time},
+        convert_types=True,
+    )
+    return [
+        Node(
+            package="nav2_controller", executable="controller_server",
+            name="follower_mppi_controller_server", namespace="MAV2",
+            output="screen", parameters=[mppi_parameters],
+        ),
+        Node(
+            package="nav2_lifecycle_manager", executable="lifecycle_manager",
+            name="follower_local_lifecycle_manager", namespace="MAV2",
+            output="screen",
+            parameters=[{"autostart": True,
+                         "node_names": ["follower_mppi_controller_server"],
+                         "use_sim_time": use_sim_time}],
+        ),
+        Node(
+            package="drone_nav2_bringup", executable="follower_path_adapter.py",
+            name="follower_path_adapter", namespace="MAV2", output="screen",
+            parameters=[{"target_update_threshold": 0.15, "use_sim_time": use_sim_time}],
+        ),
+    ]
 
 
 def generate_launch_description():
@@ -194,11 +230,14 @@ def generate_launch_description():
                 "MAV2",
                 LaunchConfiguration("mav2_slot_forward"),
                 LaunchConfiguration("mav2_slot_left"),
+                False,
             ),
             _follower_controller(
                 "MAV3",
                 LaunchConfiguration("mav3_slot_forward"),
                 LaunchConfiguration("mav3_slot_left"),
+                True,
             ),
+            *_mav2_local_control(bringup_share),
         ]
     )

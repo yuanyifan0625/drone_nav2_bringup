@@ -39,6 +39,8 @@ GZ_PARTITION=issue7_manual_validation ros2 launch drone_nav2_bringup formation_m
 觀察：
 出現「Formation mission idle: Ready for a Formation Mission Goal」。確認：
 ros2 lifecycle get /MAV1/controller_server 顯示 active [3]；
+ros2 lifecycle get /MAV2/follower_mppi_controller_server 也顯示 active [3]；
+/MAV2/cmd_vel 的 Publisher count: 1，且 publisher 是 /MAV2/follower_mppi_controller_server。
 ros2 topic info /MAV2/cmd_vel 與 /MAV3/cmd_vel 各顯示 Publisher count: 1。
 RViz 載入 drone_nav2_bringup/rviz/mav1_offboard_mission.rviz，Fixed Frame 是 map；
 它顯示 static map、/MAV1/plan、MAV1 TF、arena walls 與 route graph。
@@ -55,17 +57,23 @@ land_all、idle。另開終端可觀察 follower 控制：
 ros2 topic echo /MAV2/cmd_vel
 ros2 topic echo /MAV3/cmd_vel
 
+[4a] 終端 E：建立 MAV2 預期 slot 路徑上的單一靜態障礙。
+指令（此例放在通往 node 9 前、約 (18.9, 9.0) 的 MAV2 左後 slot；每次驗證前只建立一次）：
+gz service -s /world/nav2_arena/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 3000 --req 'sdf: "<sdf version=\"1.9\"><model name=\"mav2_slot_obstacle\"><static>true</static><pose>18.9 9.0 1.5 0 0 0</pose><link name=\"link\"><collision name=\"collision\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></collision><visual name=\"visual\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></visual></link></model></sdf>"'
+觀察：/MAV2/depth/points 可看到障礙；MPPI 繞行後回到 slot，且未觸發 abort_hold。
+
+
 [5] 終端 E 或 RViz：選擇一個 Formation Goal。每次任務完成、狀態回到 idle 後，
 才可送下一個目標。
 方式 A（GeoJSON node ID，重送三次可避開 DDS discovery 時序）：
-ros2 topic pub --times 3 -r 2 /MAV1/formation_goal_node_id std_msgs/msg/Int32 "{data: 4}"
+ros2 topic pub --times 3 -r 2 /MAV1/formation_goal_node_id std_msgs/msg/Int32 "{data: 9}"
 方式 B（直接模擬 RViz 的座標 Goal；不開 GUI 時使用）：
 ros2 topic pub --once /MAV1/formation_goal_pose geometry_msgs/msg/PoseStamped "{header: {frame_id: map}, pose: {position: {x: 6.5, y: -6.5, z: 0.0}, orientation: {w: 1.0}}}"
 方式 C（RViz）：
 在終端 C 開啟的 RViz 工具列選擇唯一的「2D Goal Pose」，再於地圖上點選座標；
 它會發布 /MAV1/formation_goal_pose。
 觀察：
-方式 A 的 node 4 由 Formation Goal Adapter 解析為 map 座標 (1.0, -6.5)，方式 B
+方式 A 的 node 9 由 Formation Goal Adapter 解析為 map 座標 (25.0, 14.0)，方式 B
 與 C 則直接使用 map 座標；三者都只會由 Adapter 發布正式的 /MAV1/mission_goal。
 合格條件是三架到 ENU Flight Level 3.0 m、MAV2/MAV3 在 MAV1 yaw-relative 固定 V-slot
 收斂、MAV1 成功導航，最後三架 LandAll。若看到 abort_hold，記錄 status 的具體原因，
