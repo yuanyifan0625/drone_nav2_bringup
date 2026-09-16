@@ -11,7 +11,7 @@ from rclpy.node import Node
 
 
 class FormationMissionLaunchTest(unittest.TestCase):
-    """Only MAV1 has Nav2; each Follower has exactly its own controller seam."""
+    """Only MAV1 has Nav2; each Follower owns its migration controller seams."""
 
     @classmethod
     def setUpClass(cls):
@@ -36,7 +36,7 @@ class FormationMissionLaunchTest(unittest.TestCase):
         os.killpg(cls.process.pid, signal.SIGINT)
         cls.process.wait(timeout=8.0)
 
-    def test_leader_owns_nav2_and_followers_own_only_their_cmd_vel(self):
+    def test_leader_owns_nav2_and_followers_own_controller_seams(self):
         deadline = time.monotonic() + 15.0
         expected = {
             ("planner_server", "/MAV1"),
@@ -64,7 +64,10 @@ class FormationMissionLaunchTest(unittest.TestCase):
                 )
                 if topic not in {"/parameter_events", "/rosout"}
             }
-            self.assertEqual({f"/{follower}/cmd_vel"}, publisher_topics)
+            self.assertEqual(
+                {f"/{follower}/cmd_vel", f"/{follower}/formation_target_pose"},
+                publisher_topics,
+            )
 
 
 if __name__ == "__main__":

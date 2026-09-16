@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -28,6 +28,34 @@ def body_offset_to_map_target(
         leader_x + slot_forward * math.cos(leader_yaw) - slot_left * math.sin(leader_yaw),
         leader_y + slot_forward * math.sin(leader_yaw) + slot_left * math.cos(leader_yaw),
     )
+
+
+def map_frame_formation_target_pose(
+    *,
+    leader_x: float,
+    leader_y: float,
+    leader_z: float,
+    leader_yaw: float,
+    slot_forward: float,
+    slot_left: float,
+) -> PoseStamped:
+    """Create a map-frame Formation Slot target for the migration seam."""
+
+    target_x, target_y = body_offset_to_map_target(
+        leader_x=leader_x,
+        leader_y=leader_y,
+        leader_yaw=leader_yaw,
+        slot_forward=slot_forward,
+        slot_left=slot_left,
+    )
+    target = PoseStamped()
+    target.header.frame_id = "map"
+    target.pose.position.x = target_x
+    target.pose.position.y = target_y
+    target.pose.position.z = leader_z
+    target.pose.orientation.z = math.sin(leader_yaw / 2.0)
+    target.pose.orientation.w = math.cos(leader_yaw / 2.0)
+    return target
 
 
 def map_error_to_flu(
@@ -145,6 +173,9 @@ class FixedSlotFollowerController(Node):
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
         self._publisher = self.create_publisher(Twist, f"/{vehicle_namespace}/cmd_vel", reliable_qos)
+        self._target_publisher = self.create_publisher(
+            PoseStamped, f"/{vehicle_namespace}/formation_target_pose", reliable_qos
+        )
         self.create_subscription(
             Odometry, f"/{leader_namespace}/odom", self._on_leader_odom, reliable_qos
         )
@@ -189,13 +220,18 @@ class FixedSlotFollowerController(Node):
         follower_position = self._follower_odom.pose.pose.position
         leader_yaw = odometry_yaw(self._leader_odom)
         follower_yaw = odometry_yaw(self._follower_odom)
-        target_x, target_y = body_offset_to_map_target(
+        target = map_frame_formation_target_pose(
             leader_x=leader_position.x,
             leader_y=leader_position.y,
+            leader_z=leader_position.z,
             leader_yaw=leader_yaw,
             slot_forward=self._slot_forward,
             slot_left=self._slot_left,
         )
+        target.header.stamp = self.get_clock().now().to_msg()
+        self._target_publisher.publish(target)
+        target_x = target.pose.position.x
+        target_y = target.pose.position.y
         forward_error, left_error = map_error_to_flu(
             error_east=target_x - follower_position.x,
             error_north=target_y - follower_position.y,

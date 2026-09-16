@@ -7,7 +7,7 @@ import subprocess
 import time
 import unittest
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
@@ -48,7 +48,11 @@ class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
             ),
         )
         cls.commands = []
+        cls.targets = []
         cls.node.create_subscription(Twist, "/MAV2/cmd_vel", cls.commands.append, qos)
+        cls.node.create_subscription(
+            PoseStamped, "/MAV2/formation_target_pose", cls.targets.append, qos
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -78,6 +82,24 @@ class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
             if predicate():
                 return
         raise AssertionError("Follower controller did not satisfy its public contract")
+
+    def test_map_frame_target_pose_is_vehicle_scoped_and_periodic(self):
+        self.targets.clear()
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and len(self.targets) < 3:
+            self.leader_publisher.publish(self.odometry(2.0, 1.0, math.pi / 2.0))
+            self.follower_publisher.publish(self.odometry(0.0, 0.0))
+            self.phase_publisher.publish(String(data="form_up"))
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        self.assertGreaterEqual(len(self.targets), 3)
+        self.assertEqual(
+            1, len(self.node.get_publishers_info_by_topic("/MAV2/formation_target_pose"))
+        )
+        target = self.targets[-1]
+        self.assertEqual("map", target.header.frame_id)
+        self.assertTrue(math.isclose(target.pose.position.x, 1.2, abs_tol=1e-6))
+        self.assertTrue(math.isclose(target.pose.position.y, 0.2, abs_tol=1e-6))
+
 
     def test_vehicle_scoped_tracking_and_stale_leader_fails_closed(self):
         self.spin_until(
