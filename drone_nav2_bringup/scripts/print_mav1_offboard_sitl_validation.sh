@@ -39,9 +39,15 @@ GZ_PARTITION=issue7_manual_validation ros2 launch drone_nav2_bringup formation_m
 觀察：
 出現「Formation mission idle: Ready for a Formation Mission Goal」。確認：
 ros2 lifecycle get /MAV1/controller_server 顯示 active [3]；
-ros2 lifecycle get /MAV2/follower_mppi_controller_server 也顯示 active [3]；
-/MAV2/cmd_vel 的 Publisher count: 1，且 publisher 是 /MAV2/follower_mppi_controller_server。
-ros2 topic info /MAV2/cmd_vel 與 /MAV3/cmd_vel 各顯示 Publisher count: 1。
+ros2 lifecycle get /MAV2/follower_mppi_controller_server 與
+ros2 lifecycle get /MAV3/follower_mppi_controller_server 都顯示 active [3]；
+/MAV2/cmd_vel 與 /MAV3/cmd_vel 都各有一個 publisher，且皆為各自的
+follower_mppi_controller_server；PX4 bridge 是各 topic 唯一 subscriber。
+ros2 topic echo --once /MAV2/cooperative_obstacles 與
+ros2 topic echo --once /MAV3/cooperative_obstacles 可確認各 follower 有 peer odometry obstacle 點雲。
+另外確認 /MAV2/depth/raw/points 的 frame_id 是 camera_link，且
+/MAV2/depth/points 的 frame_id 是 MAV2/depth_camera_link；兩者 camera pose 都是
+base_link 前方 0.13233 m、上方 0.26078 m，避免錯誤 frame 造成靜態障礙漂移。
 RViz 載入 drone_nav2_bringup/rviz/mav1_offboard_mission.rviz，Fixed Frame 是 map；
 它顯示 static map、/MAV1/plan、MAV1 TF、arena walls 與 route graph。
 這個 RViz 的唯一 2D Goal Pose 發布到 /MAV1/formation_goal_pose，會經過
@@ -79,9 +85,9 @@ ros2 topic pub --once /MAV1/formation_goal_pose geometry_msgs/msg/PoseStamped "{
 收斂、MAV1 成功導航，最後三架 LandAll。若看到 abort_hold，記錄 status 的具體原因，
 它代表安全 gate 正確拒絕正常完成。
 
-目前程式的已知手動驗證結果（2026-09-09）：三架可起飛、FormUp 且 MAV1 可開始導航，
-但 MAV1/MAV3 最小距離曾達 0.60 m，低於 0.70 m，因此進入 abort_hold 再 LandAll；
-此結果尚未通過正常完成驗收，修正 MAV3 follower 行為後需重跑本步驟。
+歷史驗證（2026-09-09、Issue 13 前）曾出現 MAV1/MAV3 最小距離 0.60 m 而觸發
+abort_hold；完成 MAV3 MPPI 與 Cooperative Obstacle 後，必須以本流程重新驗證，不能將
+abort_hold 視為正常完成。
 
 [6] 所有終端：依序清理 runtime。
 操作：

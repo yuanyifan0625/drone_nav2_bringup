@@ -7,7 +7,7 @@ import subprocess
 import time
 import unittest
 
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
@@ -16,7 +16,7 @@ from std_msgs.msg import String
 
 
 class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
-    """MAV2 only commands MAV2 and fails closed on stale Leader odometry."""
+    """MAV2 publishes only its yaw-relative Formation Target Pose."""
 
     @classmethod
     def setUpClass(cls):
@@ -47,9 +47,7 @@ class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
                 durability=DurabilityPolicy.TRANSIENT_LOCAL,
             ),
         )
-        cls.commands = []
         cls.targets = []
-        cls.node.create_subscription(Twist, "/MAV2/cmd_vel", cls.commands.append, qos)
         cls.node.create_subscription(
             PoseStamped, "/MAV2/formation_target_pose", cls.targets.append, qos
         )
@@ -101,23 +99,9 @@ class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
         self.assertTrue(math.isclose(target.pose.position.y, 0.2, abs_tol=1e-6))
 
 
-    def test_vehicle_scoped_tracking_and_stale_leader_fails_closed(self):
-        self.spin_until(
-            lambda: any(abs(command.linear.x) > 0.01 for command in self.commands)
-        )
+    def test_controller_has_no_direct_cmd_vel_publisher(self):
         self.assertEqual(
-            1, len(self.node.get_publishers_info_by_topic("/MAV2/cmd_vel"))
-        )
-        command_count = len(self.commands)
-        self.spin_until(
-            lambda: any(
-                abs(command.linear.x) < 1e-9
-                and abs(command.linear.y) < 1e-9
-                and abs(command.angular.z) < 1e-9
-                for command in self.commands[command_count:]
-            ),
-            publish_leader=False,
-            timeout=2.0,
+            0, len(self.node.get_publishers_info_by_topic("/MAV2/cmd_vel"))
         )
 
 

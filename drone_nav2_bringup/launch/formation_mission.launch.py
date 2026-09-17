@@ -68,9 +68,7 @@ def _px4_bridge(vehicle_namespace: str, target_system: int) -> Node:
     )
 
 
-def _follower_controller(
-    vehicle_namespace: str, slot_forward, slot_left, publish_cmd_vel: bool
-) -> Node:
+def _follower_controller(vehicle_namespace: str, slot_forward, slot_left) -> Node:
     """Create one vehicle-scoped Fixed V-Slot controller."""
 
     return Node(
@@ -85,38 +83,32 @@ def _follower_controller(
                 "leader_namespace": "MAV1",
                 "slot_forward": slot_forward,
                 "slot_left": slot_left,
-                "position_gain": LaunchConfiguration("follower_position_gain"),
-                "yaw_gain": LaunchConfiguration("follower_yaw_gain"),
-                "max_linear_speed": LaunchConfiguration("follower_max_linear_speed"),
-                "max_yaw_rate": LaunchConfiguration("follower_max_yaw_rate"),
-                "minimum_leader_distance": LaunchConfiguration("minimum_leader_distance"),
                 "telemetry_timeout": LaunchConfiguration("telemetry_timeout"),
-                "publish_cmd_vel": publish_cmd_vel,
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
             }
         ],
     )
 
 
-def _mav2_local_control(bringup_share: str):
-    """Return MAV2's sole local controller, owner, and moving-path adapter."""
+def _follower_local_control(bringup_share: str, vehicle_namespace: str):
+    """Return one follower's sole local controller, owner, and path adapter."""
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     mppi_parameters = RewrittenYaml(
-        source_file=f"{bringup_share}/config/mav2_follower_mppi.yaml",
-        root_key="MAV2",
+        source_file=f"{bringup_share}/config/{vehicle_namespace.lower()}_follower_mppi.yaml",
+        root_key=vehicle_namespace,
         param_rewrites={"use_sim_time": use_sim_time},
         convert_types=True,
     )
     return [
         Node(
             package="nav2_controller", executable="controller_server",
-            name="follower_mppi_controller_server", namespace="MAV2",
+            name="follower_mppi_controller_server", namespace=vehicle_namespace,
             output="screen", parameters=[mppi_parameters],
         ),
         Node(
             package="nav2_lifecycle_manager", executable="lifecycle_manager",
-            name="follower_local_lifecycle_manager", namespace="MAV2",
+            name="follower_local_lifecycle_manager", namespace=vehicle_namespace,
             output="screen",
             parameters=[{"autostart": True,
                          "node_names": ["follower_mppi_controller_server"],
@@ -124,8 +116,14 @@ def _mav2_local_control(bringup_share: str):
         ),
         Node(
             package="drone_nav2_bringup", executable="follower_path_adapter.py",
-            name="follower_path_adapter", namespace="MAV2", output="screen",
+            name="follower_path_adapter", namespace=vehicle_namespace, output="screen",
             parameters=[{"target_update_threshold": 0.15, "use_sim_time": use_sim_time}],
+        ),
+        Node(
+            package="drone_nav2_bringup", executable="cooperative_obstacle_publisher.py",
+            name="cooperative_obstacle_publisher", namespace=vehicle_namespace,
+            output="screen",
+            parameters=[{"vehicle_namespace": vehicle_namespace, "use_sim_time": use_sim_time}],
         ),
     ]
 
@@ -202,13 +200,8 @@ def generate_launch_description():
             DeclareLaunchArgument("mav2_slot_left", default_value="0.8"),
             DeclareLaunchArgument("mav3_slot_forward", default_value="-0.8"),
             DeclareLaunchArgument("mav3_slot_left", default_value="-0.8"),
-            DeclareLaunchArgument("follower_position_gain", default_value="1.0"),
-            DeclareLaunchArgument("follower_yaw_gain", default_value="1.5"),
-            DeclareLaunchArgument("follower_max_linear_speed", default_value="0.6"),
-            DeclareLaunchArgument("follower_max_yaw_rate", default_value="0.8"),
             DeclareLaunchArgument("slot_tolerance", default_value="0.25"),
             DeclareLaunchArgument("minimum_separation", default_value="0.7"),
-            DeclareLaunchArgument("minimum_leader_distance", default_value="0.9"),
             DeclareLaunchArgument("telemetry_timeout", default_value="0.5"),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("gazebo_clock_topic", default_value="/world/nav2_arena/clock"),
@@ -230,14 +223,13 @@ def generate_launch_description():
                 "MAV2",
                 LaunchConfiguration("mav2_slot_forward"),
                 LaunchConfiguration("mav2_slot_left"),
-                False,
             ),
             _follower_controller(
                 "MAV3",
                 LaunchConfiguration("mav3_slot_forward"),
                 LaunchConfiguration("mav3_slot_left"),
-                True,
             ),
-            *_mav2_local_control(bringup_share),
+            *_follower_local_control(bringup_share, "MAV2"),
+            *_follower_local_control(bringup_share, "MAV3"),
         ]
     )

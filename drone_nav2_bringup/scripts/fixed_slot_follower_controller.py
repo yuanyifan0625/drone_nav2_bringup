@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -58,71 +58,6 @@ def map_frame_formation_target_pose(
     return target
 
 
-def map_error_to_flu(
-    *, error_east: float, error_north: float, follower_yaw: float
-) -> tuple[float, float]:
-    """Express a map-frame ENU position error in the follower's FLU frame."""
-
-    return (
-        math.cos(follower_yaw) * error_east + math.sin(follower_yaw) * error_north,
-        -math.sin(follower_yaw) * error_east + math.cos(follower_yaw) * error_north,
-    )
-
-
-def normalized_angle(angle: float) -> float:
-    """Return an angle in [-pi, pi]."""
-
-    return math.atan2(math.sin(angle), math.cos(angle))
-
-
-def limited_follower_command(
-    *,
-    error_forward: float,
-    error_left: float,
-    yaw_error: float,
-    position_gain: float,
-    yaw_gain: float,
-    max_linear_speed: float,
-    max_yaw_rate: float,
-) -> tuple[float, float, float]:
-    """Create bounded FLU velocity intent from body-frame and yaw errors."""
-
-    forward = position_gain * error_forward
-    left = position_gain * error_left
-    speed = math.hypot(forward, left)
-    if speed > max_linear_speed > 0.0:
-        scale = max_linear_speed / speed
-        forward *= scale
-        left *= scale
-    yaw_rate = max(-max_yaw_rate, min(max_yaw_rate, yaw_gain * yaw_error))
-    return forward, left, yaw_rate
-
-
-def prevent_leader_closing_command(
-    *,
-    forward: float,
-    left: float,
-    follower_yaw: float,
-    leader_x: float,
-    leader_y: float,
-    follower_x: float,
-    follower_y: float,
-    minimum_leader_distance: float,
-) -> tuple[float, float]:
-    """Stop planar motion that would reduce an already-close Leader separation."""
-
-    east_from_leader = follower_x - leader_x
-    north_from_leader = follower_y - leader_y
-    separation = math.hypot(east_from_leader, north_from_leader)
-    if separation <= 0.0 or separation > minimum_leader_distance:
-        return forward, left
-    command_east = math.cos(follower_yaw) * forward - math.sin(follower_yaw) * left
-    command_north = math.sin(follower_yaw) * forward + math.cos(follower_yaw) * left
-    if command_east * east_from_leader + command_north * north_from_leader < 0.0:
-        return 0.0, 0.0
-    return forward, left
-
-
 def odometry_yaw(odometry: Odometry) -> float:
     """Extract planar ENU yaw from an odometry quaternion."""
 
@@ -142,20 +77,8 @@ class FixedSlotFollowerController(Node):
         leader_namespace = self.declare_parameter("leader_namespace", "MAV1").value
         self._slot_forward = float(self.declare_parameter("slot_forward", -0.8).value)
         self._slot_left = float(self.declare_parameter("slot_left", 0.8).value)
-        self._position_gain = float(self.declare_parameter("position_gain", 1.0).value)
-        self._yaw_gain = float(self.declare_parameter("yaw_gain", 1.5).value)
-        self._max_linear_speed = float(
-            self.declare_parameter("max_linear_speed", 0.6).value
-        )
-        self._max_yaw_rate = float(self.declare_parameter("max_yaw_rate", 0.8).value)
-        self._minimum_leader_distance = float(
-            self.declare_parameter("minimum_leader_distance", 0.9).value
-        )
         self._telemetry_timeout = float(
             self.declare_parameter("telemetry_timeout", 0.5).value
-        )
-        self._publish_cmd_vel = bool(
-            self.declare_parameter("publish_cmd_vel", True).value
         )
         self._phase = "idle"
         self._leader_odom: Odometry | None = None
@@ -174,11 +97,6 @@ class FixedSlotFollowerController(Node):
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
-        )
-        self._publisher = (
-            self.create_publisher(Twist, f"/{vehicle_namespace}/cmd_vel", reliable_qos)
-            if self._publish_cmd_vel
-            else None
         )
         self._target_publisher = self.create_publisher(
             PoseStamped, f"/{vehicle_namespace}/formation_target_pose", reliable_qos
@@ -213,21 +131,16 @@ class FixedSlotFollowerController(Node):
     def _tick(self) -> None:
         if self._phase not in {"form_up", "navigate_leader"}:
             return
-        command = Twist()
         if not (
             self._leader_odom
             and self._follower_odom
             and self._telemetry_is_fresh(self._leader_received_ns)
             and self._telemetry_is_fresh(self._follower_received_ns)
         ):
-            if self._publisher is not None:
-                self._publisher.publish(command)
             return
 
         leader_position = self._leader_odom.pose.pose.position
-        follower_position = self._follower_odom.pose.pose.position
         leader_yaw = odometry_yaw(self._leader_odom)
-        follower_yaw = odometry_yaw(self._follower_odom)
         target = map_frame_formation_target_pose(
             leader_x=leader_position.x,
             leader_y=leader_position.y,
@@ -238,34 +151,6 @@ class FixedSlotFollowerController(Node):
         )
         target.header.stamp = self.get_clock().now().to_msg()
         self._target_publisher.publish(target)
-        target_x = target.pose.position.x
-        target_y = target.pose.position.y
-        forward_error, left_error = map_error_to_flu(
-            error_east=target_x - follower_position.x,
-            error_north=target_y - follower_position.y,
-            follower_yaw=follower_yaw,
-        )
-        command.linear.x, command.linear.y, command.angular.z = limited_follower_command(
-            error_forward=forward_error,
-            error_left=left_error,
-            yaw_error=normalized_angle(leader_yaw - follower_yaw),
-            position_gain=self._position_gain,
-            yaw_gain=self._yaw_gain,
-            max_linear_speed=self._max_linear_speed,
-            max_yaw_rate=self._max_yaw_rate,
-        )
-        command.linear.x, command.linear.y = prevent_leader_closing_command(
-            forward=command.linear.x,
-            left=command.linear.y,
-            follower_yaw=follower_yaw,
-            leader_x=leader_position.x,
-            leader_y=leader_position.y,
-            follower_x=follower_position.x,
-            follower_y=follower_position.y,
-            minimum_leader_distance=self._minimum_leader_distance,
-        )
-        if self._publisher is not None:
-            self._publisher.publish(command)
 
 
 def main(args=None) -> None:

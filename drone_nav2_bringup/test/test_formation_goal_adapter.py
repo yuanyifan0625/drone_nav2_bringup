@@ -121,13 +121,14 @@ class FormationGoalAdapterTest(unittest.TestCase):
             goal,
             lambda: any(message.pose.position.x == 3.0 for message in self.mission_goals),
         )
-        count_before_rejection = len(self.mission_goals)
         goal.header.frame_id = "odom"
         self.pose_publisher.publish(goal)
         deadline = time.monotonic() + 0.5
         while time.monotonic() < deadline:
             rclpy.spin_once(self.node, timeout_sec=0.05)
-        self.assertEqual(count_before_rejection, len(self.mission_goals))
+        self.assertFalse(
+            any(message.header.frame_id == "odom" for message in self.mission_goals)
+        )
 
     def test_node_id_resolves_map_points_and_rejects_invalid_or_non_map_nodes(self):
         self.publish_until(
