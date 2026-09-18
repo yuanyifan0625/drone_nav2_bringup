@@ -22,15 +22,47 @@ def target_moved_enough(
     ) >= threshold
 
 
-def should_replace_path(
-    previous: PoseStamped | None, target: PoseStamped, threshold: float,
-    last_sent_seconds: float | None, now_seconds: float, minimum_interval: float,
-) -> bool:
-    """Rate-limit FollowPath replacement while a leader moves its slot."""
+def pose_yaw(pose: PoseStamped) -> float:
+    """Return a pose's normalized planar yaw."""
 
+    orientation = pose.pose.orientation
+    return math.atan2(
+        2.0 * (orientation.w * orientation.z + orientation.x * orientation.y),
+        1.0 - 2.0 * (orientation.y**2 + orientation.z**2),
+    )
+
+
+def target_yaw_changed_enough(
+    previous: PoseStamped | None, target: PoseStamped, threshold: float
+) -> bool:
+    """Return whether Formation Heading changed by at least ``threshold``."""
+
+    if previous is None:
+        return True
+    difference = (pose_yaw(target) - pose_yaw(previous) + math.pi) % (2.0 * math.pi)
+    return abs(difference - math.pi) >= threshold
+
+
+def should_replace_path(
+    previous: PoseStamped | None,
+    target: PoseStamped,
+    position_threshold: float,
+    yaw_threshold: float,
+    last_sent_seconds: float | None,
+    now_seconds: float,
+    position_minimum_interval: float,
+    yaw_minimum_interval: float,
+) -> bool:
+    """Apply independent position and Formation Heading replacement limits."""
+
+    elapsed = math.inf if last_sent_seconds is None else now_seconds - last_sent_seconds
+    epsilon = 1e-9
     return (
-        target_moved_enough(previous, target, threshold)
-        and (last_sent_seconds is None or now_seconds - last_sent_seconds >= minimum_interval)
+        target_moved_enough(previous, target, position_threshold)
+        and elapsed + epsilon >= position_minimum_interval
+    ) or (
+        target_yaw_changed_enough(previous, target, yaw_threshold)
+        and elapsed + epsilon >= yaw_minimum_interval
     )
 
 
@@ -73,10 +105,16 @@ class FollowerPathAdapter(Node):
         self._minimum_replacement_interval = float(
             self.declare_parameter("minimum_replacement_interval", 1.0).value
         )
+        self._yaw_update_threshold = math.radians(
+            float(self.declare_parameter("yaw_update_threshold_degrees", 5.0).value)
+        )
+        self._yaw_minimum_replacement_interval = float(
+            self.declare_parameter("yaw_minimum_replacement_interval", 0.2).value
+        )
         self.create_subscription(PoseStamped, "formation_target_pose", self._on_target, 10)
         self.create_subscription(Odometry, "map_odom", self._on_odom, 10)
         self._client = ActionClient(self, FollowPath, "follow_path")
-        self.create_timer(0.5, self._send_if_needed)
+        self.create_timer(0.2, self._send_if_needed)
 
     def _on_target(self, message: PoseStamped) -> None:
         self._target = message
@@ -88,9 +126,9 @@ class FollowerPathAdapter(Node):
         if self._target is None or self._odom is None or not self._client.server_is_ready():
             return
         if not should_replace_path(
-            self._last_sent, self._target, self._target_threshold,
+            self._last_sent, self._target, self._target_threshold, self._yaw_update_threshold,
             self._last_sent_seconds, self.get_clock().now().nanoseconds / 1e9,
-            self._minimum_replacement_interval,
+            self._minimum_replacement_interval, self._yaw_minimum_replacement_interval,
         ):
             return
         if self._goal_handle is not None:

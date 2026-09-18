@@ -31,6 +31,8 @@ follower_mppi_controller_server:
       critics: [ConstraintCritic, ObstaclesCritic, GoalCritic, PathAlignCritic, PathFollowCritic]
       ObstaclesCritic:
         repulsion_weight: 0.4
+      PathAlignCritic:
+        use_path_orientations: true
 local_costmap:
   local_costmap:
     ros__parameters:
