@@ -135,5 +135,38 @@ ros2 topic info /MAV2/cmd_vel
 ros2 topic info /MAV3/cmd_vel
 觀察：
 三個確認指令都顯示「Unknown topic」，表示 Formation Mission runtime 已清除。
+
+pgrep -af '[M]icroXRCEAgent|[b]uild/px4_sitl_default/bin/px4|[g]z sim|[g]zserver|[r]os2 (launch|run)'
+1. 終端 C：先按 Ctrl+C 停止 Formation launch，等待它印出 shutdown 完成。
+2. 終端 B：再按 Ctrl+C 停止 PX4 SITL 與 Gazebo。
+3. 終端 A：最後按 Ctrl+C 停止 MicroXRCEAgent。
+4. 確認 ROS runtime 已清掉：
+
+ros2 topic info /MAV1/mission_phase
+ros2 topic info /MAV2/cmd_vel
+ros2 topic info /MAV3/cmd_vel
+
+三個都應是：
+
+Unknown topic
+
+5. 若 launch 父程序消失、但 topic 仍存在，就是孤兒 node。先找殘留 bridge：
+
+pgrep -af "cmd_vel_to_px4_offboard_bridge|px4_odometry_bridge|depth_sensor_adapter|formation_mission_manager|follower_"
+
+挑其中一個 PID，取得它的 process group：
+
+ps -o pid,ppid,pgid,sid,cmd -p <PID>
+
+例如顯示 PGID=55433，只停止這組舊 Formation runtime：
+
+kill -INT -- -55433
+
+兩秒後重跑第 4 步。若仍殘留才使用：
+
+kill -TERM -- -55433
+
+6. 最後確認模擬也清掉：
+
 pgrep -af '[M]icroXRCEAgent|[b]uild/px4_sitl_default/bin/px4|[g]z sim|[g]zserver|[r]os2 (launch|run)'
 EOF
