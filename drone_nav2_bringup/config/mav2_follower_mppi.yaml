@@ -29,6 +29,8 @@ follower_mppi_controller_server:
       ay_max: 0.8
       az_max: 1.0
       critics: [ConstraintCritic, ObstaclesCritic, GoalCritic, PathAlignCritic, PathFollowCritic]
+      ObstaclesCritic:
+        repulsion_weight: 0.4
 local_costmap:
   local_costmap:
     ros__parameters:

@@ -162,6 +162,15 @@ def generate_launch_description():
                 "vehicle_prefix": vehicle_prefix,
                 "odom_frame": odom_frame,
                 "base_frame": base_frame,
+                "map_origin_x": ParameterValue(
+                    LaunchConfiguration("spawn_x"), value_type=float
+                ),
+                "map_origin_y": ParameterValue(
+                    LaunchConfiguration("spawn_y"), value_type=float
+                ),
+                "map_origin_z": ParameterValue(
+                    LaunchConfiguration("spawn_z"), value_type=float
+                ),
                 "use_sim_time": use_sim_time,
             }
         ],

@@ -41,6 +41,8 @@ def _follower_odometry_and_tf(
                     "vehicle_prefix": vehicle_namespace,
                     "odom_frame": f"{vehicle_namespace}/odom",
                     "base_frame": f"{vehicle_namespace}/base_link",
+                    "map_origin_x": float(spawn_x),
+                    "map_origin_y": float(spawn_y),
                     "use_sim_time": use_sim_time,
                 }
             ],
@@ -117,13 +119,13 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
         Node(
             package="drone_nav2_bringup", executable="follower_path_adapter.py",
             name="follower_path_adapter", namespace=vehicle_namespace, output="screen",
-            parameters=[{"target_update_threshold": 0.15, "use_sim_time": use_sim_time}],
+            parameters=[{"target_update_threshold": 0.35, "minimum_replacement_interval": 1.0, "use_sim_time": use_sim_time}],
         ),
         Node(
             package="drone_nav2_bringup", executable="cooperative_obstacle_publisher.py",
             name="cooperative_obstacle_publisher", namespace=vehicle_namespace,
             output="screen",
-            parameters=[{"vehicle_namespace": vehicle_namespace, "use_sim_time": use_sim_time}],
+            parameters=[{"vehicle_namespace": vehicle_namespace, "excluded_vehicles": ["MAV1"], "use_sim_time": use_sim_time}],
         ),
     ]
 

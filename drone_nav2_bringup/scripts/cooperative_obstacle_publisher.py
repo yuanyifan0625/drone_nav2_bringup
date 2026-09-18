@@ -65,14 +65,17 @@ def fresh_peer_odometry(
     received_ns: dict[str, int],
     now_ns: int,
     timeout: float,
+    excluded_vehicles: set[str] | None = None,
 ) -> list[Odometry]:
     """Return only fresh peer odometry without treating self as an obstacle."""
 
+    excluded_vehicles = excluded_vehicles or set()
     return [
         odometry[peer]
         for peer in VEHICLES
         if (
             peer != vehicle
+            and peer not in excluded_vehicles
             and peer in odometry
             and (now_ns - received_ns.get(peer, 0)) / 1e9 <= timeout
         )
@@ -119,6 +122,9 @@ class CooperativeObstaclePublisher(Node):
         self._timeout = float(
             self.declare_parameter("observation_timeout", 0.3).value
         )
+        self._excluded_vehicles = {
+            name for name in self.declare_parameter("excluded_vehicles", [""]).value if name
+        }
         self._odometry: dict[str, Odometry] = {}
         self._received_ns: dict[str, int] = {}
         self._publisher = self.create_publisher(
@@ -127,7 +133,7 @@ class CooperativeObstaclePublisher(Node):
         for vehicle in VEHICLES:
             self.create_subscription(
                 Odometry,
-                f"/{vehicle}/odom",
+                f"/{vehicle}/map_odom",
                 lambda message, name=vehicle: self._on_odom(name, message),
                 10,
             )
@@ -152,6 +158,7 @@ class CooperativeObstaclePublisher(Node):
             received_ns=self._received_ns,
             now_ns=now_ns,
             timeout=self._timeout,
+            excluded_vehicles=self._excluded_vehicles,
         )
         header = deepcopy(self_odom.header)
         header.frame_id = f"{self._vehicle}/base_link"

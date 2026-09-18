@@ -50,6 +50,9 @@ class FormationMissionManager(Node):
         self._warmup_seconds = float(
             self.declare_parameter("warmup_seconds", 1.0).value
         )
+        self._takeoff_timeout_seconds = float(
+            self.declare_parameter("takeoff_timeout_seconds", 20.0).value
+        )
         self._abort_hold_seconds = float(
             self.declare_parameter("abort_hold_seconds", 2.0).value
         )
@@ -105,7 +108,7 @@ class FormationMissionManager(Node):
         for vehicle in self._vehicles:
             self.create_subscription(
                 Odometry,
-                f"/{vehicle}/odom",
+                f"/{vehicle}/map_odom",
                 lambda message, name=vehicle: self._on_odom(name, message),
                 reliable_qos,
             )
@@ -169,7 +172,13 @@ class FormationMissionManager(Node):
             self._publish_phase("takeoff_all", "Offboard warm-up complete; taking off all vehicles")
         elif self._phase == "takeoff_all" and self._all_at_flight_level():
             self._publish_phase("form_up", "Flight Level reached; forming Fixed V-Slots")
+        elif self._phase == "takeoff_all" and elapsed >= self._takeoff_timeout_seconds:
+            self._enter_abort_hold("Takeoff timed out before all vehicles reached Flight Level")
         elif self._phase == "form_up":
+            separation_reason = self._unsafe_separation_reason()
+            if separation_reason is not None:
+                self._enter_abort_hold(separation_reason)
+                return
             if self._followers_converged():
                 if self._slot_converged_for_required_duration():
                     self._start_leader_navigation()
@@ -245,6 +254,9 @@ class FormationMissionManager(Node):
                     f"{follower} slot error {error:.2f} m exceeds "
                     f"{self._abort_slot_error:.2f} m"
                 )
+        return self._unsafe_separation_reason()
+
+    def _unsafe_separation_reason(self) -> str | None:
         for index, first_name in enumerate(self._vehicles):
             first = self._odometry[first_name].pose.pose.position
             for second_name in self._vehicles[index + 1 :]:

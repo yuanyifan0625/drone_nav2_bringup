@@ -102,10 +102,10 @@ class FixedSlotFollowerController(Node):
             PoseStamped, f"/{vehicle_namespace}/formation_target_pose", reliable_qos
         )
         self.create_subscription(
-            Odometry, f"/{leader_namespace}/odom", self._on_leader_odom, reliable_qos
+            Odometry, f"/{leader_namespace}/map_odom", self._on_leader_odom, reliable_qos
         )
         self.create_subscription(
-            Odometry, f"/{vehicle_namespace}/odom", self._on_follower_odom, reliable_qos
+            Odometry, f"/{vehicle_namespace}/map_odom", self._on_follower_odom, reliable_qos
         )
         self.create_subscription(
             String, f"/{vehicle_namespace}/mission_phase", self._on_phase, phase_qos

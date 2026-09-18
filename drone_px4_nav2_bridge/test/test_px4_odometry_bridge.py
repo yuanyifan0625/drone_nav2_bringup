@@ -7,6 +7,7 @@ import time
 import unittest
 
 from drone_px4_nav2_bridge.px4_odometry_bridge import local_position_to_enu
+from drone_px4_nav2_bridge.px4_odometry_bridge import enu_position_to_map
 from drone_px4_nav2_bridge.px4_odometry_bridge import Px4OdometryBridge
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleLocalPosition
@@ -47,6 +48,12 @@ class LocalPositionToEnuTest(unittest.TestCase):
         self.assertEqual(converted.position, (7.0, 3.0, 2.0))
         self.assertEqual(converted.velocity, (-4.0, 1.5, -0.25))
         self.assertAlmostEqual(converted.yaw, math.pi / 2.0)
+
+    def test_adds_spawn_origin_when_projecting_local_enu_into_map(self) -> None:
+        self.assertEqual(
+            enu_position_to_map((0.5, -1.0, 3.0), (-2.0, 3.0, 0.0)),
+            (-1.5, 2.0, 3.0),
+        )
 
     def test_rejects_an_invalid_px4_position_estimate(self):
         converted = local_position_to_enu(self.valid_local_position(xy_valid=False))

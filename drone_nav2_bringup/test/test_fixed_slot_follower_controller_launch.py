@@ -35,8 +35,8 @@ class FixedSlotFollowerControllerLaunchTest(unittest.TestCase):
         rclpy.init()
         cls.node = Node("fixed_slot_follower_controller_launch_test")
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
-        cls.leader_publisher = cls.node.create_publisher(Odometry, "/MAV1/odom", qos)
-        cls.follower_publisher = cls.node.create_publisher(Odometry, "/MAV2/odom", qos)
+        cls.leader_publisher = cls.node.create_publisher(Odometry, "/MAV1/map_odom", qos)
+        cls.follower_publisher = cls.node.create_publisher(Odometry, "/MAV2/map_odom", qos)
         cls.phase_publisher = cls.node.create_publisher(
             String,
             "/MAV2/mission_phase",

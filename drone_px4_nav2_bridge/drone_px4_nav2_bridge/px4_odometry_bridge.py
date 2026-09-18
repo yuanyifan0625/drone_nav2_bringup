@@ -1,5 +1,6 @@
 """Publish MAV1 ENU odometry and TF from PX4 local NED position estimates."""
 
+from copy import deepcopy
 from dataclasses import dataclass
 import math
 from typing import Optional, Protocol, Tuple
@@ -78,6 +79,14 @@ def local_position_to_enu(
     )
 
 
+def enu_position_to_map(
+    position: Tuple[float, float, float], origin: Tuple[float, float, float]
+) -> Tuple[float, float, float]:
+    """Project one PX4-local ENU position into the shared map frame."""
+
+    return tuple(value + offset for value, offset in zip(position, origin))
+
+
 class Px4OdometryBridge(Node):
     """Bridge a PX4 VehicleLocalPosition topic into MAV1 ROS odometry and TF."""
 
@@ -95,6 +104,13 @@ class Px4OdometryBridge(Node):
         self._base_frame = self.declare_parameter(
             "base_frame", f"{vehicle_prefix}/base_link"
         ).value
+        self._map_frame = self.declare_parameter("map_frame", "map").value
+        self._map_origin = (
+            float(self.declare_parameter("map_origin_x", 0.0).value),
+            float(self.declare_parameter("map_origin_y", 0.0).value),
+            float(self.declare_parameter("map_origin_z", 0.0).value),
+        )
+        self._map_odom_topic = self.declare_parameter("map_odom_topic", "map_odom").value
 
         px4_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -110,6 +126,9 @@ class Px4OdometryBridge(Node):
         )
 
         self._odom_publisher = self.create_publisher(Odometry, odom_topic, odom_qos)
+        self._map_odom_publisher = self.create_publisher(
+            Odometry, self._map_odom_topic, odom_qos
+        )
         self._tf_broadcaster = TransformBroadcaster(self)
         self._subscription = self.create_subscription(
             VehicleLocalPosition,
@@ -148,6 +167,15 @@ class Px4OdometryBridge(Node):
         odometry.twist.twist.linear.y = enu_state.velocity[1]
         odometry.twist.twist.linear.z = enu_state.velocity[2]
         self._odom_publisher.publish(odometry)
+
+        map_odometry = deepcopy(odometry)
+        map_odometry.header.frame_id = self._map_frame
+        (
+            map_odometry.pose.pose.position.x,
+            map_odometry.pose.pose.position.y,
+            map_odometry.pose.pose.position.z,
+        ) = enu_position_to_map(enu_state.position, self._map_origin)
+        self._map_odom_publisher.publish(map_odometry)
 
         transform = TransformStamped()
         transform.header.stamp = timestamp

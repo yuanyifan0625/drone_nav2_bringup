@@ -56,3 +56,20 @@ def test_peer_footprints_are_follower_local_and_bounded() -> None:
     assert points
     assert all(math.hypot(x - 1.0, y) <= 0.251 for x, y, _ in points)
     assert all(z == 0.0 for _, _, z in points)
+
+
+def test_leader_is_excluded_from_follower_cooperative_obstacles() -> None:
+    mav1 = _odom(1.13, 0.0)
+    mav2 = _odom(0.0, 0.0)
+    mav3 = _odom(0.0, 1.6)
+
+    peers = fresh_peer_odometry(
+        vehicle="MAV3",
+        odometry={"MAV1": mav1, "MAV2": mav2, "MAV3": mav3},
+        received_ns={"MAV1": 1_000_000_000, "MAV2": 1_000_000_000, "MAV3": 1_000_000_000},
+        now_ns=1_000_000_000,
+        timeout=0.3,
+        excluded_vehicles={"MAV1"},
+    )
+
+    assert peers == [mav2]

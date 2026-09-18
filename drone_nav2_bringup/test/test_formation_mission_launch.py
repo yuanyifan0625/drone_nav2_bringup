@@ -106,11 +106,13 @@ class FormationMissionLaunchTest(unittest.TestCase):
             self.assertEqual(f"/{follower}", publisher.node_namespace)
             consumer_deadline = time.monotonic() + 5.0
             consumers = []
-            while not consumers and time.monotonic() < consumer_deadline:
+            while time.monotonic() < consumer_deadline:
                 rclpy.spin_once(self.node, timeout_sec=0.1)
                 consumers = self.node.get_subscriptions_info_by_topic(
                     f"/{follower}/cmd_vel"
                 )
+                if len(consumers) == 1 and consumers[0].node_name != "_NODE_NAME_UNKNOWN_":
+                    break
             self.assertEqual(1, len(consumers))
             self.assertEqual("cmd_vel_to_px4_offboard_bridge", consumers[0].node_name)
             self.assertEqual(f"/{follower}", consumers[0].node_namespace)
