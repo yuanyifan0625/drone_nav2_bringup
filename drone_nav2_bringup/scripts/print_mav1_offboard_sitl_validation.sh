@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# 印出 Issue #7 三機 Gazebo SITL 的手動驗證步驟。
+# 印出 Issue #18 三機 Gazebo SITL 與 FOV Motion Guard 的手動驗證步驟。
 #
-# 前提：使用者已在 ros2_humble Docker 環境，且已執行：
-#   source /opt/ros/humble/setup.bash
-#   source install/setup.bash
+# 前提：使用者已進入 ros2_humble Docker container。
 
 set -eu
 
 cat <<'EOF'
-Issue #7 三機 Fixed V-Slot Formation Mission SITL 手動驗證
-前提：你已在 ros2_humble Docker 環境，且已 source ROS 與 workspace。
+Issue #18 三機 Fixed V-Slot + FOV Motion Guard SITL 手動驗證
+前提：你已在 ros2_humble Docker container 內。
 
 [0] 任一終端：建置本次驗證使用的 packages。
 指令：
 cd /home/ncrl/docker_ubuntu22/px4_ws
-colcon build --packages-select drone_px4_nav2_bridge drone_nav2_bringup
+source /opt/ros/humble/setup.bash
+colcon build --packages-select drone_px4_nav2_bridge drone_nav2_bringup --symlink-install
+source install/setup.bash
 觀察：
 兩個 package 都成功完成建置。
 
@@ -32,7 +32,7 @@ GZ_PARTITION=issue7_manual_validation DRONES=3 ./scripts/start_arena_sitl.sh
 MAV1、MAV2、MAV3 都連線到 XRCE Agent，且三架的 PX4 preflight parameter
 設定成功。此終端必須保持執行。
 
-[3] 終端 C：啟動 Formation Mission；MAV1 有 Nav2，MAV2/MAV3 只跑 followers。
+[3] 終端 C：啟動 Formation Mission；MAV1 有 Nav2，MAV2/MAV3 只跑 follower local control。
 指令：
 cd /home/ncrl/docker_ubuntu22/px4_ws
 GZ_PARTITION=issue7_manual_validation ros2 launch drone_nav2_bringup formation_mission.launch.py use_sim_time:=true rviz:=true
@@ -41,20 +41,41 @@ GZ_PARTITION=issue7_manual_validation ros2 launch drone_nav2_bringup formation_m
 ros2 lifecycle get /MAV1/controller_server 顯示 active [3]；
 ros2 lifecycle get /MAV2/follower_mppi_controller_server 與
 ros2 lifecycle get /MAV3/follower_mppi_controller_server 都顯示 active [3]；
-/MAV2/cmd_vel 與 /MAV3/cmd_vel 都各有一個 publisher，且皆為各自的
-follower_mppi_controller_server；PX4 bridge 是各 topic 唯一 subscriber。
+/MAV2/follower_mppi_controller_server 與 /MAV3/follower_mppi_controller_server
+都透過各自 lifecycle manager 顯示 active [3]；FOV Motion Guard 是一般 node，
+不屬於 lifecycle manager。
+
+確認最終速度的唯一 publisher 與中介資料流：
+ros2 topic info -v /MAV2/cmd_vel
+ros2 topic info -v /MAV3/cmd_vel
+ros2 topic info -v /MAV2/mppi_cmd_vel
+ros2 topic info -v /MAV3/mppi_cmd_vel
+預期：/MAVx/cmd_vel 的唯一 publisher 是 /MAVx/fov_motion_guard，唯一 subscriber
+是 /MAVx/cmd_vel_to_px4_offboard_bridge；/MAVx/mppi_cmd_vel 的 publisher 是
+/MAVx/follower_mppi_controller_server，subscriber 是 /MAVx/fov_motion_guard。
+
+確認 FOV Guard 的感知輸入可用：
+ros2 topic hz /MAV2/depth/image_raw
+ros2 topic hz /MAV3/depth/image_raw
+ros2 topic echo --once /MAV2/depth/camera_info
+ros2 topic echo --once /MAV3/depth/camera_info
+預期：兩個 depth image topic 都持續有頻率，CameraInfo 的 width 與 K[0] 為正值。
+
 ros2 topic echo --once /MAV2/cooperative_obstacles 與
 ros2 topic echo --once /MAV3/cooperative_obstacles 可確認各 follower 有 peer odometry obstacle 點雲。
 另外確認 /MAV2/depth/raw/points 的 frame_id 是 camera_link，且
 /MAV2/depth/points 的 frame_id 是 MAV2/depth_camera_link；兩者 camera pose 都是
 base_link 前方 0.13233 m、上方 0.26078 m，避免錯誤 frame 造成靜態障礙漂移。
 RViz 載入 drone_nav2_bringup/rviz/mav1_offboard_mission.rviz，Fixed Frame 是 map；
-它顯示 static map、/MAV1/plan、MAV1 TF、arena walls 與 route graph。
+它顯示 static map、/MAV1/plan、MAV1 TF、arena walls、route graph，以及：
+MAV2 Follower Local Costmap（/MAV2/local_costmap/costmap）與
+MAV3 Follower Local Costmap（/MAV3/local_costmap/costmap）。costmap 預期可看見
+障礙物與 inflation layer；若沒有，先停止驗收並確認 depth image 與 topic 名稱。
 這個 RViz 的唯一 2D Goal Pose 發布到 /MAV1/formation_goal_pose，會經過
 Formation Goal Adapter 成為正式 Mission Goal。Plan-Only 使用另一個
 mav1_plan_only.rviz，其 /MAV1/goal_pose 不會開始飛行。
 
-[4] 終端 D：監控公開 Formation Mission lifecycle。
+[4] 終端 D：監控 Formation Mission 與 FOV Guard。
 指令：
 ros2 topic echo /MAV1/mission_status
 觀察：
@@ -62,11 +83,19 @@ ros2 topic echo /MAV1/mission_status
 land_all、idle。另開終端可觀察 follower 控制：
 ros2 topic echo /MAV2/cmd_vel
 ros2 topic echo /MAV3/cmd_vel
+ros2 topic echo /MAV2/fov_motion_guard/active
+ros2 topic echo /MAV3/fov_motion_guard/active
+ros2 topic echo /MAV2/mppi_cmd_vel
+ros2 topic echo /MAV3/mppi_cmd_vel
+觀察：active=true 表示 Guard 正在阻擋平移或漸進放行；active=false 表示目前
+MPPI 的移動方向已在有新鮮有效深度的前視 FOV 內。不要將 active=true 本身視為失敗。
 
 [4a] 終端 E：建立 MAV2 預期 slot 路徑上的單一靜態障礙。
 指令（此例放在通往 node 9 前、約 (18.9, 9.0) 的 MAV2 左後 slot；每次驗證前只建立一次）：
-gz service -s /world/nav2_arena/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 3000 --req 'sdf: "<sdf version=\"1.9\"><model name=\"mav2_slot_obstacle\"><static>true</static><pose>18.9 9.0 1.5 0 0 0</pose><link name=\"link\"><collision name=\"collision\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></collision><visual name=\"visual\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></visual></link></model></sdf>"'
-觀察：/MAV2/depth/points 可看到障礙；MPPI 繞行後回到 slot，且未觸發 abort_hold。
+GZ_PARTITION=issue7_manual_validation gz service -s /world/nav2_arena/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 3000 --req 'sdf: "<sdf version=\"1.9\"><model name=\"mav2_slot_obstacle\"><static>true</static><pose>18.9 9.0 1.5 0 0 0</pose><link name=\"link\"><collision name=\"collision\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></collision><visual name=\"visual\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></visual></link></model></sdf>"'
+觀察：/MAV2/depth/points 與 MAV2 local costmap 都可看到障礙物；MPPI 產生的
+/MAV2/mppi_cmd_vel 經 Guard 成為唯一 /MAV2/cmd_vel，MAV2 繞行後回到 slot，且未觸發
+abort_hold。FOV Guard 是否 active 取決於當時欲移動方向是否已被前視相機觀測。
 
 
 [5] 終端 E 或 RViz：選擇一個 Formation Goal。每次任務完成、狀態回到 idle 後，
@@ -82,8 +111,9 @@ ros2 topic pub --once /MAV1/formation_goal_pose geometry_msgs/msg/PoseStamped "{
 方式 A 的 node 9 由 Formation Goal Adapter 解析為 map 座標 (25.0, 14.0)，方式 B
 與 C 則直接使用 map 座標；三者都只會由 Adapter 發布正式的 /MAV1/mission_goal。
 合格條件是三架到 ENU Flight Level 3.0 m、MAV2/MAV3 在 MAV1 yaw-relative 固定 V-slot
-收斂、MAV1 成功導航，最後三架 LandAll。若看到 abort_hold，記錄 status 的具體原因，
-它代表安全 gate 正確拒絕正常完成。
+收斂、MAV1 成功導航到 node 9，最後三架 LandAll；最終 /MAVx/cmd_vel 全程只有 Guard
+一個 publisher。若看到 abort_hold，記錄 status 的具體原因與 abort 前後的
+mppi_cmd_vel、cmd_vel、fov_motion_guard/active、local costmap。
 
 歷史驗證（2026-09-09、Issue 13 前）曾出現 MAV1/MAV3 最小距離 0.60 m 而觸發
 abort_hold；完成 MAV3 MPPI 與 Cooperative Obstacle 後，必須以本流程重新驗證，不能將
