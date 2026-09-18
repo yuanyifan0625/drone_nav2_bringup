@@ -107,6 +107,7 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
             package="nav2_controller", executable="controller_server",
             name="follower_mppi_controller_server", namespace=vehicle_namespace,
             output="screen", parameters=[mppi_parameters],
+            remappings=[("cmd_vel", "mppi_cmd_vel")],
         ),
         Node(
             package="nav2_lifecycle_manager", executable="lifecycle_manager",
@@ -120,6 +121,11 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
             package="drone_nav2_bringup", executable="follower_path_adapter.py",
             name="follower_path_adapter", namespace=vehicle_namespace, output="screen",
             parameters=[{"target_update_threshold": 0.35, "minimum_replacement_interval": 1.0, "use_sim_time": use_sim_time}],
+        ),
+        Node(
+            package="drone_nav2_bringup", executable="follower_fov_motion_guard.py",
+            name="fov_motion_guard", namespace=vehicle_namespace, output="screen",
+            parameters=[{"use_sim_time": use_sim_time}],
         ),
         Node(
             package="drone_nav2_bringup", executable="cooperative_obstacle_publisher.py",

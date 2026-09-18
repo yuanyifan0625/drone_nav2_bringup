@@ -18,6 +18,30 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /map
       Value: true
+    - Alpha: 0.55
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Enabled: true
+      Name: MAV2 Follower Local Costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /MAV2/local_costmap/costmap
+      Value: true
+    - Alpha: 0.55
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Enabled: true
+      Name: MAV3 Follower Local Costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /MAV3/local_costmap/costmap
+      Value: true
     - Class: rviz_default_plugins/Path
       Color: 255; 215; 0
       Enabled: true

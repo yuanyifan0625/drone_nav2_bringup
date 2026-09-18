@@ -13,6 +13,7 @@ install(
     scripts/formation_goal_adapter.py
     scripts/fixed_slot_follower_controller.py
     scripts/follower_path_adapter.py
+    scripts/follower_fov_motion_guard.py
     scripts/depth_sensor_adapter.py
     scripts/cooperative_obstacle_publisher.py
     scripts/formation_mission_manager.py
@@ -55,6 +56,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_follower_path_adapter test/test_follower_path_adapter.py
     ENV ROS_DOMAIN_ID=114
+  )
+  ament_add_pytest_test(
+    test_follower_fov_motion_guard test/test_follower_fov_motion_guard.py
+    ENV ROS_DOMAIN_ID=116
   )
   ament_add_pytest_test(
     test_cooperative_obstacle_publisher test/test_cooperative_obstacle_publisher.py

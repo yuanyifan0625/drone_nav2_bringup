@@ -61,10 +61,12 @@ class FormationMissionLaunchTest(unittest.TestCase):
             ("follower_mppi_controller_server", "/MAV2"),
             ("follower_local_lifecycle_manager", "/MAV2"),
             ("follower_path_adapter", "/MAV2"),
+            ("fov_motion_guard", "/MAV2"),
             ("cooperative_obstacle_publisher", "/MAV2"),
             ("follower_mppi_controller_server", "/MAV3"),
             ("follower_local_lifecycle_manager", "/MAV3"),
             ("follower_path_adapter", "/MAV3"),
+            ("fov_motion_guard", "/MAV3"),
             ("cooperative_obstacle_publisher", "/MAV3"),
             ("formation_mission_manager", "/"),
         }
@@ -102,7 +104,7 @@ class FormationMissionLaunchTest(unittest.TestCase):
             publishers = self.node.get_publishers_info_by_topic(f"/{follower}/cmd_vel")
             self.assertEqual(1, len(publishers))
             publisher = publishers[0]
-            self.assertEqual("follower_mppi_controller_server", publisher.node_name)
+            self.assertEqual("fov_motion_guard", publisher.node_name)
             self.assertEqual(f"/{follower}", publisher.node_namespace)
             consumer_deadline = time.monotonic() + 5.0
             consumers = []
@@ -116,6 +118,21 @@ class FormationMissionLaunchTest(unittest.TestCase):
             self.assertEqual(1, len(consumers))
             self.assertEqual("cmd_vel_to_px4_offboard_bridge", consumers[0].node_name)
             self.assertEqual(f"/{follower}", consumers[0].node_namespace)
+            mppi_publishers = self.node.get_publishers_info_by_topic(
+                f"/{follower}/mppi_cmd_vel"
+            )
+            self.assertEqual(1, len(mppi_publishers))
+            self.assertEqual("follower_mppi_controller_server", mppi_publishers[0].node_name)
+            mppi_consumers = self.node.get_subscriptions_info_by_topic(
+                f"/{follower}/mppi_cmd_vel"
+            )
+            self.assertEqual(1, len(mppi_consumers))
+            self.assertEqual("fov_motion_guard", mppi_consumers[0].node_name)
+            active_publishers = self.node.get_publishers_info_by_topic(
+                f"/{follower}/fov_motion_guard/active"
+            )
+            self.assertEqual(1, len(active_publishers))
+            self.assertEqual("fov_motion_guard", active_publishers[0].node_name)
 
 
     def test_follower_mppi_lifecycles_are_active(self):
