@@ -19,11 +19,14 @@ class FormationMissionLaunchTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        os.environ["ROS_DOMAIN_ID"] = "113"
+        cls.fov_guard_value = os.environ.get("FOV_GUARD_VALUE", "false")
+        cls.fov_guard_enabled = cls.fov_guard_value.lower() in {"true", "1"}
+        os.environ.setdefault("ROS_DOMAIN_ID", "113")
         cls.process = subprocess.Popen(
             [
                 "ros2", "launch", "drone_nav2_bringup", "formation_mission.launch.py",
                 "use_sim_time:=false", "rviz:=false",
+                f"fov_guard:={cls.fov_guard_value}",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -61,15 +64,15 @@ class FormationMissionLaunchTest(unittest.TestCase):
             ("follower_mppi_controller_server", "/MAV2"),
             ("follower_local_lifecycle_manager", "/MAV2"),
             ("follower_path_adapter", "/MAV2"),
-            ("fov_motion_guard", "/MAV2"),
             ("cooperative_obstacle_publisher", "/MAV2"),
             ("follower_mppi_controller_server", "/MAV3"),
             ("follower_local_lifecycle_manager", "/MAV3"),
             ("follower_path_adapter", "/MAV3"),
-            ("fov_motion_guard", "/MAV3"),
             ("cooperative_obstacle_publisher", "/MAV3"),
             ("formation_mission_manager", "/"),
         }
+        if self.fov_guard_enabled:
+            expected.update({("fov_motion_guard", "/MAV2"), ("fov_motion_guard", "/MAV3")})
         nodes = set()
         while time.monotonic() < deadline:
             nodes = set(self.node.get_node_names_and_namespaces())
@@ -104,7 +107,12 @@ class FormationMissionLaunchTest(unittest.TestCase):
             publishers = self.node.get_publishers_info_by_topic(f"/{follower}/cmd_vel")
             self.assertEqual(1, len(publishers))
             publisher = publishers[0]
-            self.assertEqual("fov_motion_guard", publisher.node_name)
+            expected_publisher = (
+                "fov_motion_guard"
+                if self.fov_guard_enabled
+                else "follower_mppi_controller_server"
+            )
+            self.assertEqual(expected_publisher, publisher.node_name)
             self.assertEqual(f"/{follower}", publisher.node_namespace)
             consumer_deadline = time.monotonic() + 5.0
             consumers = []
@@ -121,18 +129,22 @@ class FormationMissionLaunchTest(unittest.TestCase):
             mppi_publishers = self.node.get_publishers_info_by_topic(
                 f"/{follower}/mppi_cmd_vel"
             )
-            self.assertEqual(1, len(mppi_publishers))
-            self.assertEqual("follower_mppi_controller_server", mppi_publishers[0].node_name)
-            mppi_consumers = self.node.get_subscriptions_info_by_topic(
-                f"/{follower}/mppi_cmd_vel"
-            )
-            self.assertEqual(1, len(mppi_consumers))
-            self.assertEqual("fov_motion_guard", mppi_consumers[0].node_name)
             active_publishers = self.node.get_publishers_info_by_topic(
                 f"/{follower}/fov_motion_guard/active"
             )
-            self.assertEqual(1, len(active_publishers))
-            self.assertEqual("fov_motion_guard", active_publishers[0].node_name)
+            if self.fov_guard_enabled:
+                self.assertEqual(1, len(mppi_publishers))
+                self.assertEqual("follower_mppi_controller_server", mppi_publishers[0].node_name)
+                mppi_consumers = self.node.get_subscriptions_info_by_topic(
+                    f"/{follower}/mppi_cmd_vel"
+                )
+                self.assertEqual(1, len(mppi_consumers))
+                self.assertEqual("fov_motion_guard", mppi_consumers[0].node_name)
+                self.assertEqual(1, len(active_publishers))
+                self.assertEqual("fov_motion_guard", active_publishers[0].node_name)
+            else:
+                self.assertEqual([], mppi_publishers)
+                self.assertEqual([], active_publishers)
 
 
     def test_follower_mppi_lifecycles_are_active(self):

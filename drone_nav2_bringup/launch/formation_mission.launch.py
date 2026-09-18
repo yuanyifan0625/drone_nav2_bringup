@@ -3,8 +3,9 @@
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
 
@@ -96,6 +97,10 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
     """Return one follower's sole local controller, owner, and path adapter."""
 
     use_sim_time = LaunchConfiguration("use_sim_time")
+    fov_guard = LaunchConfiguration("fov_guard")
+    fov_guard_enabled = PythonExpression(
+        ["'", fov_guard, "'.lower() in ('true', '1')"]
+    )
     mppi_parameters = RewrittenYaml(
         source_file=f"{bringup_share}/config/{vehicle_namespace.lower()}_follower_mppi.yaml",
         root_key=vehicle_namespace,
@@ -107,7 +112,14 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
             package="nav2_controller", executable="controller_server",
             name="follower_mppi_controller_server", namespace=vehicle_namespace,
             output="screen", parameters=[mppi_parameters],
-            remappings=[("cmd_vel", "mppi_cmd_vel")],
+            remappings=[
+                (
+                    "cmd_vel",
+                    PythonExpression(
+                        ["'mppi_cmd_vel' if ", fov_guard_enabled, " else 'cmd_vel'"]
+                    ),
+                )
+            ],
         ),
         Node(
             package="nav2_lifecycle_manager", executable="lifecycle_manager",
@@ -126,6 +138,7 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
             package="drone_nav2_bringup", executable="follower_fov_motion_guard.py",
             name="fov_motion_guard", namespace=vehicle_namespace, output="screen",
             parameters=[{"use_sim_time": use_sim_time}],
+            condition=IfCondition(fov_guard_enabled),
         ),
         Node(
             package="drone_nav2_bringup", executable="cooperative_obstacle_publisher.py",
@@ -211,6 +224,7 @@ def generate_launch_description():
             DeclareLaunchArgument("slot_tolerance", default_value="0.25"),
             DeclareLaunchArgument("minimum_separation", default_value="0.7"),
             DeclareLaunchArgument("telemetry_timeout", default_value="0.5"),
+            DeclareLaunchArgument("fov_guard", default_value="false"),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("gazebo_clock_topic", default_value="/world/nav2_arena/clock"),
             DeclareLaunchArgument("rviz", default_value="false"),
