@@ -20,6 +20,12 @@ from std_msgs.msg import Empty, String
 from fixed_slot_follower_controller import body_offset_to_map_target, odometry_yaw
 
 
+def wrapped_yaw_error(yaw: float, reference_yaw: float) -> float:
+    """Return the signed shortest angular difference in radians."""
+
+    return math.atan2(math.sin(yaw - reference_yaw), math.cos(yaw - reference_yaw))
+
+
 class FormationMissionManager(Node):
     """Own the observable lifecycle of a three-vehicle Formation Mission."""
 
@@ -40,6 +46,12 @@ class FormationMissionManager(Node):
         )
         self._slot_convergence_seconds = float(
             self.declare_parameter("slot_convergence_seconds", 3.0).value
+        )
+        self._form_up_yaw_tolerance = math.radians(
+            float(self.declare_parameter("form_up_yaw_tolerance_degrees", 10.0).value)
+        )
+        self._form_up_timeout_seconds = float(
+            self.declare_parameter("form_up_timeout_seconds", 15.0).value
         )
         self._abort_slot_error = float(
             self.declare_parameter("abort_slot_error", 2.0).value
@@ -179,10 +191,14 @@ class FormationMissionManager(Node):
             if separation_reason is not None:
                 self._enter_abort_hold(separation_reason)
                 return
-            if self._followers_converged():
-                if self._slot_converged_for_required_duration():
-                    self._start_leader_navigation()
-            else:
+            form_up_ready = self._followers_ready_for_navigation()
+            if elapsed >= self._form_up_timeout_seconds:
+                self._enter_abort_hold(
+                    "Form-up timed out before followers converged to Fixed V-Slots and leader yaw"
+                )
+            elif form_up_ready and self._slot_converged_for_required_duration():
+                self._start_leader_navigation()
+            elif not form_up_ready:
                 self._slot_converged_since_ns = None
         elif self._phase == "navigate_leader":
             unsafe_reason = self._unsafe_formation_reason()
@@ -236,6 +252,17 @@ class FormationMissionManager(Node):
             self._follower_slot_error(follower) <= self._slot_tolerance
             for follower in self._followers
         )
+
+    def _followers_yaw_aligned(self) -> bool:
+        leader_yaw = odometry_yaw(self._odometry[self._leader])
+        return all(
+            abs(wrapped_yaw_error(odometry_yaw(self._odometry[follower]), leader_yaw))
+            <= self._form_up_yaw_tolerance
+            for follower in self._followers
+        )
+
+    def _followers_ready_for_navigation(self) -> bool:
+        return self._followers_converged() and self._followers_yaw_aligned()
 
     def _slot_converged_for_required_duration(self) -> bool:
         now_ns = self.get_clock().now().nanoseconds

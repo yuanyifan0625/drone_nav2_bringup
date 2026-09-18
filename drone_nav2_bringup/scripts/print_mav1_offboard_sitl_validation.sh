@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 印出 Issue #21 三機 Gazebo SITL 與 MPPI direct-command baseline 的手動驗證步驟。
+# 印出 Issue #22 三機 Gazebo SITL、form-up yaw gate 與 MPPI baseline 的手動驗證步驟。
 #
 # 前提：使用者已進入 ros2_humble Docker container。
 
 set -eu
 
 cat <<'EOF'
-Issue #21 三機 Fixed V-Slot + MPPI direct-command baseline SITL 手動驗證
+Issue #22 三機 Fixed V-Slot + form-up yaw gate + MPPI baseline SITL 手動驗證
 前提：你已在 ros2_humble Docker container 內。
 
 [0] 任一終端：建置本次驗證使用的 packages。
@@ -43,6 +43,12 @@ ros2 lifecycle get /MAV2/follower_mppi_controller_server 與
 ros2 lifecycle get /MAV3/follower_mppi_controller_server 都顯示 active [3]；
 /MAV2/follower_mppi_controller_server 與 /MAV3/follower_mppi_controller_server
 都透過各自 lifecycle manager 顯示 active [3]。
+
+確認 form-up yaw gate 參數：
+ros2 param get /formation_mission_manager form_up_yaw_tolerance_degrees
+ros2 param get /formation_mission_manager form_up_timeout_seconds
+預期：分別為 10.0 與 15.0；MAV2/MAV3 必須與 MAV1 yaw 相差不超過 10°，且同時
+滿足既有 slot position error 條件連續 3 秒，才可進入 navigate_leader。
 
 確認 baseline 最終速度的唯一 publisher：
 ros2 topic info -v /MAV2/cmd_vel
@@ -82,14 +88,23 @@ ros2 topic echo /MAV2/cmd_vel
 ros2 topic echo /MAV3/cmd_vel
 觀察：/MAVx/cmd_vel 直接是 MPPI 的最終速度命令；本 baseline 不啟動 FOV Guard。
 
-[4a] 終端 E：建立 MAV2 預期 slot 路徑上的單一靜態障礙。
+[4a] 終端 E：在送 Mission Goal 前開始錄製一次驗收 rosbag。
+指令：
+ros2 bag record -o /tmp/issue22-node9 /MAV1/mission_phase /MAV1/mission_status \
+  /MAV1/map_odom /MAV2/map_odom /MAV3/map_odom \
+  /MAV2/formation_target_pose /MAV3/formation_target_pose \
+  /MAV2/cmd_vel /MAV3/cmd_vel \
+  /MAV2/local_costmap/costmap /MAV3/local_costmap/costmap
+觀察：Recorder 顯示 All requested topics are subscribed；保持執行到 LandAll 或 abort_hold。
+
+[4b] 終端 F：建立 MAV2 預期 slot 路徑上的單一靜態障礙。
 指令（此例放在通往 node 9 前、約 (18.9, 9.0) 的 MAV2 左後 slot；每次驗證前只建立一次）：
 GZ_PARTITION=issue7_manual_validation gz service -s /world/nav2_arena/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 3000 --req 'sdf: "<sdf version=\"1.9\"><model name=\"mav2_slot_obstacle\"><static>true</static><pose>18.9 9.0 1.5 0 0 0</pose><link name=\"link\"><collision name=\"collision\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></collision><visual name=\"visual\"><geometry><box><size>0.5 0.5 3.0</size></box></geometry></visual></link></model></sdf>"'
 觀察：/MAV2/depth/points 與 MAV2 local costmap 都可看到障礙物；MPPI 直接發布
 唯一 /MAV2/cmd_vel。記錄 MAV2 是否繞行並回到 slot，以及是否觸發 abort_hold。
 
 
-[5] 終端 E 或 RViz：選擇一個 Formation Goal。每次任務完成、狀態回到 idle 後，
+[5] 終端 F 或 RViz：選擇一個 Formation Goal。每次任務完成、狀態回到 idle 後，
 才可送下一個目標。
 方式 A（GeoJSON node ID，重送三次可避開 DDS discovery 時序）：
 ros2 topic pub --times 3 -r 2 /MAV1/formation_goal_node_id std_msgs/msg/Int32 "{data: 9}"
@@ -102,9 +117,10 @@ ros2 topic pub --once /MAV1/formation_goal_pose geometry_msgs/msg/PoseStamped "{
 方式 A 的 node 9 由 Formation Goal Adapter 解析為 map 座標 (25.0, 14.0)，方式 B
 與 C 則直接使用 map 座標；三者都只會由 Adapter 發布正式的 /MAV1/mission_goal。
 合格條件是三架到 ENU Flight Level 3.0 m、MAV2/MAV3 在 MAV1 yaw-relative 固定 V-slot
-收斂、MAV1 成功導航到 node 9，最後三架 LandAll；最終 /MAVx/cmd_vel 全程只有 MPPI
-一個 publisher。若看到 abort_hold，記錄 status 的具體原因與 abort 前後的
-cmd_vel、Formation Target、map odometry、local costmap。
+收斂、MAV1 成功導航到 node 9，最後三架 LandAll；form_up 必須先滿足 position 與 yaw
+連續 3 秒才會進入 navigate_leader，最終 /MAVx/cmd_vel 全程只有 MPPI 一個 publisher。
+成功時停止 recorder 後刪除 /tmp/issue22-node9；若看到 abort_hold，保留 bag，記錄 status
+具體原因，並分析 abort 前後的 cmd_vel、Formation Target、map odometry、local costmap。
 
 歷史驗證（2026-09-09、Issue 13 前）曾出現 MAV1/MAV3 最小距離 0.60 m 而觸發
 abort_hold；完成 MAV3 MPPI 與 Cooperative Obstacle 後，必須以本流程重新驗證，不能將
