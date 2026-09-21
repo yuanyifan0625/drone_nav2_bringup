@@ -81,6 +81,9 @@ if(BUILD_TESTING)
     test_formation_mission_manager test/test_formation_mission_manager.py
     ENV ROS_DOMAIN_ID=118
   )
+  ament_add_pytest_test(
+    test_follower_mppi_config test/test_follower_mppi_config.py
+  )
 endif()
 
 ament_package()
