@@ -28,14 +28,19 @@ def test_followers_do_not_complete_small_moving_slots() -> None:
 def test_followers_configure_the_same_formation_heading_costs() -> None:
     mav2 = _follow_path_config("MAV2")
     mav3 = _follow_path_config("MAV3")
+    expected_critics = [
+        "ConstraintCritic", "ObstaclesCritic", "GoalCritic", "GoalAngleCritic",
+    ]
+    expected_settings = {
+        "ConstraintCritic": {"cost_weight": 4.0},
+        "ObstaclesCritic": {"repulsion_weight": 0.4, "critical_weight": 20.0},
+        "GoalCritic": {"cost_weight": 5.0, "threshold_to_consider": 2.1},
+        "GoalAngleCritic": {"cost_weight": 3.0, "threshold_to_consider": 2.5},
+    }
 
     for config in (mav2, mav3):
-        assert "GoalAngleCritic" in config["critics"]
-        assert config["GoalAngleCritic"] == {
-            "cost_weight": 3.0,
-            "threshold_to_consider": 2.5,
-        }
-        assert config["PathAlignCritic"]["use_path_orientations"] is True
-        assert config["PathAlignCritic"]["offset_from_furthest"] == 1
-
-    assert mav2["critics"] == mav3["critics"]
+        assert config["critics"] == expected_critics
+        for critic, settings in expected_settings.items():
+            assert config[critic] == settings
+        assert "PathAlignCritic" not in config
+        assert "PathFollowCritic" not in config
