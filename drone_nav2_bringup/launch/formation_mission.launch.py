@@ -132,7 +132,7 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
         Node(
             package="drone_nav2_bringup", executable="follower_path_adapter.py",
             name="follower_path_adapter", namespace=vehicle_namespace, output="screen",
-            parameters=[{"target_update_threshold": 0.35, "minimum_replacement_interval": 1.0, "use_sim_time": use_sim_time}],
+            parameters=[{"target_update_threshold": 0.10, "minimum_replacement_interval": 0.20, "use_sim_time": use_sim_time}],
         ),
         Node(
             package="drone_nav2_bringup", executable="follower_fov_motion_guard.py",

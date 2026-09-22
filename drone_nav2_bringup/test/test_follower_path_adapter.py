@@ -46,13 +46,16 @@ def test_short_path_has_intermediate_poses_for_mppi() -> None:
 def test_path_replacement_waits_for_material_motion_and_minimum_interval() -> None:
     previous = PoseStamped()
     target = PoseStamped()
-    target.pose.position.x = 0.35
-
+    target.pose.position.x = 0.09
     assert not should_replace_path(
-        previous, target, 0.35, 5.0 * pi / 180.0, 10.0, 10.9, 1.0, 0.2
+        previous, target, 0.10, 5.0 * pi / 180.0, 10.0, 10.20, 0.20, 0.2
+    )
+    target.pose.position.x = 0.10
+    assert not should_replace_path(
+        previous, target, 0.10, 5.0 * pi / 180.0, 10.0, 10.19, 0.20, 0.2
     )
     assert should_replace_path(
-        previous, target, 0.35, 5.0 * pi / 180.0, 10.0, 11.0, 1.0, 0.2
+        previous, target, 0.10, 5.0 * pi / 180.0, 10.0, 10.20, 0.20, 0.2
     )
 
 

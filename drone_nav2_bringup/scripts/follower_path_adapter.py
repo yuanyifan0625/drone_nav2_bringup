@@ -101,9 +101,9 @@ class FollowerPathAdapter(Node):
         self._last_sent = None
         self._goal_handle = None
         self._last_sent_seconds = None
-        self._target_threshold = float(self.declare_parameter("target_update_threshold", 0.35).value)
+        self._target_threshold = float(self.declare_parameter("target_update_threshold", 0.10).value)
         self._minimum_replacement_interval = float(
-            self.declare_parameter("minimum_replacement_interval", 1.0).value
+            self.declare_parameter("minimum_replacement_interval", 0.20).value
         )
         self._yaw_update_threshold = math.radians(
             float(self.declare_parameter("yaw_update_threshold_degrees", 5.0).value)

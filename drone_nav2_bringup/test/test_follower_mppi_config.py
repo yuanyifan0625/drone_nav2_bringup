@@ -14,6 +14,17 @@ def _follow_path_config(vehicle: str) -> dict:
     return parameters["follower_mppi_controller_server"]["ros__parameters"]["FollowPath"]
 
 
+def _controller_parameters(vehicle: str) -> dict:
+    with (CONFIG_DIRECTORY / f"{vehicle.lower()}_follower_mppi.yaml").open() as stream:
+        parameters = yaml.safe_load(stream)
+    return parameters["follower_mppi_controller_server"]["ros__parameters"]
+
+
+def test_followers_do_not_complete_small_moving_slots() -> None:
+    for vehicle in ("MAV2", "MAV3"):
+        assert _controller_parameters(vehicle)["goal_checker"]["xy_goal_tolerance"] == 0.05
+
+
 def test_followers_configure_the_same_formation_heading_costs() -> None:
     mav2 = _follow_path_config("MAV2")
     mav3 = _follow_path_config("MAV3")

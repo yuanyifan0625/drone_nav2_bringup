@@ -11,7 +11,7 @@ follower_mppi_controller_server:
       movement_time_allowance: 10.0
     goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
-      xy_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.05
       yaw_goal_tolerance: 0.30
       stateful: false
     FollowPath:
