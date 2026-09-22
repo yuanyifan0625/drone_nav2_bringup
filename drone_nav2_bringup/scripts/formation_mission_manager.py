@@ -51,7 +51,7 @@ class FormationMissionManager(Node):
             float(self.declare_parameter("form_up_yaw_tolerance_degrees", 10.0).value)
         )
         self._form_up_timeout_seconds = float(
-            self.declare_parameter("form_up_timeout_seconds", 15.0).value
+            self.declare_parameter("form_up_timeout_seconds", 20.0).value
         )
         self._abort_slot_error = float(
             self.declare_parameter("abort_slot_error", 2.0).value
