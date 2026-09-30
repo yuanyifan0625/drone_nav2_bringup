@@ -8,16 +8,23 @@ import yaml
 CONFIG_DIRECTORY = Path(__file__).parents[1] / "config"
 
 
-def _follow_path_config(vehicle: str) -> dict:
+def _parameters(vehicle: str) -> dict:
     with (CONFIG_DIRECTORY / f"{vehicle.lower()}_follower_mppi.yaml").open() as stream:
-        parameters = yaml.safe_load(stream)
-    return parameters["follower_mppi_controller_server"]["ros__parameters"]["FollowPath"]
+        return yaml.safe_load(stream)
+
+
+def _follow_path_config(vehicle: str) -> dict:
+    return _parameters(vehicle)["follower_mppi_controller_server"]["ros__parameters"][
+        "FollowPath"
+    ]
 
 
 def _controller_parameters(vehicle: str) -> dict:
-    with (CONFIG_DIRECTORY / f"{vehicle.lower()}_follower_mppi.yaml").open() as stream:
-        parameters = yaml.safe_load(stream)
-    return parameters["follower_mppi_controller_server"]["ros__parameters"]
+    return _parameters(vehicle)["follower_mppi_controller_server"]["ros__parameters"]
+
+
+def _local_costmap_parameters(vehicle: str) -> dict:
+    return _parameters(vehicle)["local_costmap"]["local_costmap"]["ros__parameters"]
 
 
 def test_followers_do_not_complete_small_moving_slots() -> None:
@@ -44,3 +51,17 @@ def test_followers_configure_the_same_formation_heading_costs() -> None:
             assert config[critic] == settings
         assert "PathAlignCritic" not in config
         assert "PathFollowCritic" not in config
+
+
+def test_followers_accept_obstacles_at_flight_level() -> None:
+    expected_height_range = {
+        "min_obstacle_height": 0.0,
+        "max_obstacle_height": 10.0,
+    }
+
+    for vehicle in ("MAV2", "MAV3"):
+        obstacle_layer = _local_costmap_parameters(vehicle)["obstacle_layer"]
+        for parameter, value in expected_height_range.items():
+            assert obstacle_layer[parameter] == value
+            assert obstacle_layer["depth_points"][parameter] == value
+            assert obstacle_layer["cooperative_obstacles"][parameter] == value
