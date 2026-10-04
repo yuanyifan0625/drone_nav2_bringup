@@ -65,3 +65,16 @@ def test_followers_accept_obstacles_at_flight_level() -> None:
             assert obstacle_layer[parameter] == value
             assert obstacle_layer["depth_points"][parameter] == value
             assert obstacle_layer["cooperative_obstacles"][parameter] == value
+
+
+def test_followers_overlay_the_shared_static_map() -> None:
+    for vehicle in ("MAV2", "MAV3"):
+        costmap = _local_costmap_parameters(vehicle)
+        assert costmap["plugins"] == [
+            "static_layer", "obstacle_layer", "inflation_layer",
+        ]
+        assert costmap["static_layer"] == {
+            "plugin": "nav2_costmap_2d::StaticLayer",
+            "map_topic": "/map",
+            "map_subscribe_transient_local": True,
+        }

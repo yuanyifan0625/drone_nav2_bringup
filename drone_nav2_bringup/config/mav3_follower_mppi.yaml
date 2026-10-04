@@ -54,7 +54,11 @@ local_costmap:
       publish_frequency: 10.0
       always_send_full_costmap: true
       robot_radius: 0.4
-      plugins: [obstacle_layer, inflation_layer]
+      plugins: [static_layer, obstacle_layer, inflation_layer]
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_topic: /map
+        map_subscribe_transient_local: true
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         observation_sources: depth_points cooperative_obstacles
