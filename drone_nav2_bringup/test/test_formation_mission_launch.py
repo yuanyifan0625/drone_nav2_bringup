@@ -21,12 +21,19 @@ class FormationMissionLaunchTest(unittest.TestCase):
     def setUpClass(cls):
         cls.fov_guard_value = os.environ.get("FOV_GUARD_VALUE", "false")
         cls.fov_guard_enabled = cls.fov_guard_value.lower() in {"true", "1"}
+        cls.formation_center_value = os.environ.get(
+            "FORMATION_CENTER_ENABLED", "false"
+        )
+        cls.formation_center_enabled = (
+            cls.formation_center_value.lower() in {"true", "1"}
+        )
         os.environ.setdefault("ROS_DOMAIN_ID", "113")
         cls.process = subprocess.Popen(
             [
                 "ros2", "launch", "drone_nav2_bringup", "formation_mission.launch.py",
                 "use_sim_time:=false", "rviz:=false",
                 f"fov_guard:={cls.fov_guard_value}",
+                f"formation_center_enabled:={cls.formation_center_value}",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -74,12 +81,18 @@ class FormationMissionLaunchTest(unittest.TestCase):
         if self.fov_guard_enabled:
             expected.update({("fov_motion_guard", "/MAV2"), ("fov_motion_guard", "/MAV3")})
         nodes = set()
+        if self.formation_center_enabled:
+            expected.add(("formation_center_state", "/MAV1"))
         while time.monotonic() < deadline:
             nodes = set(self.node.get_node_names_and_namespaces())
             if expected.issubset(nodes):
                 break
             rclpy.spin_once(self.node, timeout_sec=0.1)
         self.assertTrue(expected.issubset(nodes))
+        self.assertEqual(
+            self.formation_center_enabled,
+            ("formation_center_state", "/MAV1") in nodes,
+        )
         for follower in ("MAV2", "MAV3"):
             self.assertNotIn(("planner_server", f"/{follower}"), nodes)
             self.assertNotIn(("controller_server", f"/{follower}"), nodes)
@@ -146,6 +159,13 @@ class FormationMissionLaunchTest(unittest.TestCase):
                 self.assertEqual([], mppi_publishers)
                 self.assertEqual([], active_publishers)
 
+        physical_publishers = self.node.get_publishers_info_by_topic(
+            "/MAV1/formation_center/physical_cmd_vel"
+        )
+        self.assertEqual(int(self.formation_center_enabled), len(physical_publishers))
+        mav1_publishers = self.node.get_publishers_info_by_topic("/MAV1/cmd_vel")
+        self.assertEqual(1, len(mav1_publishers))
+        self.assertEqual("controller_server", mav1_publishers[0].node_name)
 
     def test_follower_mppi_lifecycles_are_active(self):
         """Each follower local-control owner activates its only controller."""

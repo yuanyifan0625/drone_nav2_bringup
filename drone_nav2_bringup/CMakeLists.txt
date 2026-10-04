@@ -11,6 +11,7 @@ install(
 install(
   PROGRAMS
     scripts/formation_goal_adapter.py
+    scripts/formation_center_state.py
     scripts/fixed_slot_follower_controller.py
     scripts/follower_path_adapter.py
     scripts/follower_fov_motion_guard.py
@@ -80,6 +81,14 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_formation_mission_manager test/test_formation_mission_manager.py
     ENV ROS_DOMAIN_ID=118
+  )
+  ament_add_pytest_test(
+    test_formation_center_state test/test_formation_center_state.py
+    ENV ROS_DOMAIN_ID=119
+  )
+  ament_add_pytest_test(
+    test_formation_mission_formation_center_launch test/test_formation_mission_launch.py
+    ENV ROS_DOMAIN_ID=120 FORMATION_CENTER_ENABLED=true
   )
   ament_add_pytest_test(
     test_follower_mppi_config test/test_follower_mppi_config.py

@@ -156,6 +156,7 @@ def generate_launch_description():
     arena_share = get_package_share_directory("drone_nav2_apriltag")
     use_sim_time = LaunchConfiguration("use_sim_time")
     flight_level = LaunchConfiguration("flight_level")
+    formation_center_enabled = LaunchConfiguration("formation_center_enabled")
     leader_control = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             f"{bringup_share}/launch/control_only.launch.py"
@@ -199,6 +200,28 @@ def generate_launch_description():
             },
         ],
     )
+    formation_center = Node(
+        package="drone_nav2_bringup",
+        executable="formation_center_state.py",
+        name="formation_center_state",
+        namespace="MAV1",
+        output="screen",
+        parameters=[
+            {
+                "mav2_slot_forward": LaunchConfiguration("mav2_slot_forward"),
+                "mav2_slot_left": LaunchConfiguration("mav2_slot_left"),
+                "mav3_slot_forward": LaunchConfiguration("mav3_slot_forward"),
+                "mav3_slot_left": LaunchConfiguration("mav3_slot_left"),
+                "vehicle_radius": LaunchConfiguration("formation_vehicle_radius"),
+                "safety_margin": LaunchConfiguration("formation_safety_margin"),
+                "envelope_rounding_increment": LaunchConfiguration(
+                    "formation_envelope_rounding_increment"
+                ),
+                "use_sim_time": use_sim_time,
+            }
+        ],
+        condition=IfCondition(formation_center_enabled),
+    )
     goal_adapter = Node(
         package="drone_nav2_bringup",
         executable="formation_goal_adapter.py",
@@ -225,6 +248,12 @@ def generate_launch_description():
             DeclareLaunchArgument("minimum_separation", default_value="0.7"),
             DeclareLaunchArgument("telemetry_timeout", default_value="0.5"),
             DeclareLaunchArgument("fov_guard", default_value="false"),
+            DeclareLaunchArgument("formation_center_enabled", default_value="false"),
+            DeclareLaunchArgument("formation_vehicle_radius", default_value="0.4"),
+            DeclareLaunchArgument("formation_safety_margin", default_value="0.2"),
+            DeclareLaunchArgument(
+                "formation_envelope_rounding_increment", default_value="0.05"
+            ),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("gazebo_clock_topic", default_value="/world/nav2_arena/clock"),
             DeclareLaunchArgument("rviz", default_value="false"),
@@ -238,6 +267,7 @@ def generate_launch_description():
             ),
             goal_adapter,
             manager,
+            formation_center,
             _px4_bridge("MAV1", 1),
             _px4_bridge("MAV2", 2),
             _px4_bridge("MAV3", 3),
