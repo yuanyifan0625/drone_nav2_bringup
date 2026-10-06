@@ -16,6 +16,7 @@ _SPEC.loader.exec_module(_MODULE)
 
 formation_centroid = _MODULE.formation_centroid
 formation_envelope_radius = _MODULE.formation_envelope_radius
+validated_envelope_radius = _MODULE.validated_envelope_radius
 physical_mav1_command = _MODULE.physical_mav1_command
 virtual_center_odometry = _MODULE.virtual_center_odometry
 virtual_center_transform = _MODULE.virtual_center_transform
@@ -37,6 +38,17 @@ def test_fixed_v_slots_define_expected_centroid_and_conservative_envelope() -> N
     assert math.isclose(center[0], -0.5333333333333333, abs_tol=1e-9)
     assert math.isclose(center[1], 0.0, abs_tol=1e-9)
     assert math.isclose(radius, 1.45, abs_tol=1e-9)
+
+
+def test_configured_envelope_cannot_understate_required_geometry() -> None:
+    """One configured radius feeds Nav2 and the published safety state."""
+    assert validated_envelope_radius(1.45, 1.50) == 1.50
+    try:
+        validated_envelope_radius(1.45, 1.40)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("undersized collision geometry was accepted")
 
 
 def test_virtual_transform_keeps_physical_mav1_as_parent() -> None:

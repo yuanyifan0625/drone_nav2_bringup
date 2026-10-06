@@ -21,20 +21,23 @@ class FormationMissionLaunchTest(unittest.TestCase):
     def setUpClass(cls):
         cls.fov_guard_value = os.environ.get("FOV_GUARD_VALUE", "false")
         cls.fov_guard_enabled = cls.fov_guard_value.lower() in {"true", "1"}
-        cls.formation_center_value = os.environ.get(
-            "FORMATION_CENTER_ENABLED", "false"
-        )
+        cls.formation_center_value = os.environ.get("FORMATION_CENTER_ENABLED")
         cls.formation_center_enabled = (
-            cls.formation_center_value.lower() in {"true", "1"}
+            cls.formation_center_value is None
+            or cls.formation_center_value.lower() in {"true", "1"}
         )
         os.environ.setdefault("ROS_DOMAIN_ID", "113")
+        launch_command = [
+            "ros2", "launch", "drone_nav2_bringup", "formation_mission.launch.py",
+            "use_sim_time:=false", "rviz:=false",
+            f"fov_guard:={cls.fov_guard_value}",
+        ]
+        if cls.formation_center_value is not None:
+            launch_command.append(
+                f"formation_center_enabled:={cls.formation_center_value}"
+            )
         cls.process = subprocess.Popen(
-            [
-                "ros2", "launch", "drone_nav2_bringup", "formation_mission.launch.py",
-                "use_sim_time:=false", "rviz:=false",
-                f"fov_guard:={cls.fov_guard_value}",
-                f"formation_center_enabled:={cls.formation_center_value}",
-            ],
+            launch_command,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
@@ -167,6 +170,17 @@ class FormationMissionLaunchTest(unittest.TestCase):
         virtual_publishers = self.node.get_publishers_info_by_topic(
             "/MAV1/formation_center/cmd_vel"
         )
+        odom_deadline = time.monotonic() + 5.0
+        physical_odom_publishers = []
+        while time.monotonic() < odom_deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+            physical_odom_publishers = self.node.get_publishers_info_by_topic(
+                "/MAV1/odom"
+            )
+            if len(physical_odom_publishers) == 1:
+                break
+        self.assertEqual(1, len(physical_odom_publishers))
+        self.assertEqual("px4_odometry_bridge", physical_odom_publishers[0].node_name)
         if self.formation_center_enabled:
             self.assertEqual([], mav1_publishers)
             self.assertEqual(1, len(virtual_publishers))
@@ -176,6 +190,13 @@ class FormationMissionLaunchTest(unittest.TestCase):
             )
             self.assertEqual(1, len(consumers))
             self.assertEqual("cmd_vel_to_px4_offboard_bridge", consumers[0].node_name)
+            virtual_odom_publishers = self.node.get_publishers_info_by_topic(
+                "/MAV1/formation_center/map_odom"
+            )
+            self.assertEqual(1, len(virtual_odom_publishers))
+            self.assertEqual(
+                "formation_center_state", virtual_odom_publishers[0].node_name
+            )
         else:
             self.assertEqual([], virtual_publishers)
             self.assertEqual(1, len(mav1_publishers))

@@ -52,6 +52,13 @@ def formation_envelope_radius(
     return math.ceil((required - 1e-12) / rounding_increment) * rounding_increment
 
 
+def validated_envelope_radius(required: float, configured: float) -> float:
+    """Reject a configured collision radius smaller than the formation requires."""
+    if configured + 1e-12 < required:
+        raise ValueError("envelope_radius cannot be smaller than formation geometry")
+    return configured
+
+
 def virtual_center_transform(
     *, parent_frame: str, child_frame: str, forward: float, left: float
 ) -> TransformStamped:
@@ -139,13 +146,21 @@ class FormationCenterState(Node):
             ),
         )
         self._center = formation_centroid(points)
-        self._envelope_radius = formation_envelope_radius(
+        required_envelope_radius = formation_envelope_radius(
             points,
             center=self._center,
             vehicle_radius=float(self.declare_parameter("vehicle_radius", 0.4).value),
             safety_margin=float(self.declare_parameter("safety_margin", 0.2).value),
             rounding_increment=float(
                 self.declare_parameter("envelope_rounding_increment", 0.05).value
+            ),
+        )
+        self._envelope_radius = validated_envelope_radius(
+            required_envelope_radius,
+            float(
+                self.declare_parameter(
+                    "envelope_radius", required_envelope_radius
+                ).value
             ),
         )
         reliable_qos = QoSProfile(

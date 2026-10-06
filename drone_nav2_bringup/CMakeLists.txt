@@ -76,7 +76,7 @@ if(BUILD_TESTING)
   )
   ament_add_pytest_test(
     test_formation_mission_fov_guard_launch test/test_formation_mission_launch.py
-    ENV ROS_DOMAIN_ID=117 FOV_GUARD_VALUE=True
+    ENV ROS_DOMAIN_ID=117 FOV_GUARD_VALUE=True FORMATION_CENTER_ENABLED=false
   )
   ament_add_pytest_test(
     test_formation_mission_manager test/test_formation_mission_manager.py

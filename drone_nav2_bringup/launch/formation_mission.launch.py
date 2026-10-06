@@ -197,7 +197,8 @@ def generate_launch_description():
             "vehicle_namespace": "MAV1",
             "vehicle_prefix": "MAV1",
             "px4_topic": "/MAV1/fmu/out/vehicle_local_position_v1",
-            "odom_topic": nav2_odom_topic,
+            "odom_topic": "/MAV1/odom",
+            "nav2_odom_topic": nav2_odom_topic,
             "robot_base_frame": nav2_base_frame,
             "robot_radius": nav2_robot_radius,
             "inflation_radius": nav2_inflation_radius,
@@ -253,6 +254,7 @@ def generate_launch_description():
                 "envelope_rounding_increment": LaunchConfiguration(
                     "formation_envelope_rounding_increment"
                 ),
+                "envelope_radius": formation_envelope_radius,
                 "use_sim_time": use_sim_time,
             }
         ],

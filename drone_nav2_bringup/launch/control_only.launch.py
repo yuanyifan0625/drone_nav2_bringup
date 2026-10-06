@@ -21,6 +21,7 @@ def generate_launch_description():
     map_yaml = LaunchConfiguration("map_yaml")
     px4_topic = LaunchConfiguration("px4_topic")
     odom_topic = LaunchConfiguration("odom_topic")
+    nav2_odom_topic = LaunchConfiguration("nav2_odom_topic")
     robot_base_frame = LaunchConfiguration("robot_base_frame")
     robot_radius = LaunchConfiguration("robot_radius")
     inflation_radius = LaunchConfiguration("inflation_radius")
@@ -42,7 +43,7 @@ def generate_launch_description():
                 "robot_base_frame": robot_base_frame,
                 "robot_radius": robot_radius,
                 "inflation_radius": inflation_radius,
-                "odom_topic": odom_topic,
+                "odom_topic": nav2_odom_topic,
                 "map_topic": "/map",
             },
             convert_types=True,
@@ -62,6 +63,7 @@ def generate_launch_description():
             default_value="/MAV1/fmu/out/vehicle_local_position_v1",
         ),
         DeclareLaunchArgument("odom_topic", default_value="/MAV1/odom"),
+        DeclareLaunchArgument("nav2_odom_topic", default_value=odom_topic),
         DeclareLaunchArgument("robot_base_frame", default_value=base_frame),
         DeclareLaunchArgument("robot_radius", default_value="0.4"),
         DeclareLaunchArgument("inflation_radius", default_value="0.75"),
