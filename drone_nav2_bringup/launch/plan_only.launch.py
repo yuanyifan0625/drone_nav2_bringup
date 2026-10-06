@@ -13,7 +13,6 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     """Create the MAV1 Plan-Only graph without vehicle-control components."""
-
     bringup_share = get_package_share_directory("drone_nav2_bringup")
     arena_share = get_package_share_directory("drone_nav2_apriltag")
 
@@ -23,6 +22,9 @@ def generate_launch_description():
     map_yaml = LaunchConfiguration("map_yaml")
     px4_topic = LaunchConfiguration("px4_topic")
     odom_topic = LaunchConfiguration("odom_topic")
+    robot_base_frame = LaunchConfiguration("robot_base_frame")
+    robot_radius = LaunchConfiguration("robot_radius")
+    inflation_radius = LaunchConfiguration("inflation_radius")
     planner_plugin = LaunchConfiguration("planner_plugin")
     use_sim_time = LaunchConfiguration("use_sim_time")
     gazebo_clock_topic = LaunchConfiguration("gazebo_clock_topic")
@@ -37,7 +39,9 @@ def generate_launch_description():
             param_rewrites={
                 "use_sim_time": use_sim_time,
                 "global_frame": map_frame,
-                "robot_base_frame": base_frame,
+                "robot_base_frame": robot_base_frame,
+                "robot_radius": robot_radius,
+                "inflation_radius": inflation_radius,
                 "map_topic": "/map",
             },
             convert_types=True,
@@ -58,6 +62,9 @@ def generate_launch_description():
             default_value="/MAV1/fmu/out/vehicle_local_position_v1",
         ),
         DeclareLaunchArgument("odom_topic", default_value="/MAV1/odom"),
+        DeclareLaunchArgument("robot_base_frame", default_value=base_frame),
+        DeclareLaunchArgument("robot_radius", default_value="0.4"),
+        DeclareLaunchArgument("inflation_radius", default_value="0.75"),
         DeclareLaunchArgument(
             "planner_plugin",
             default_value="nav2_navfn_planner/NavfnPlanner",
@@ -216,7 +223,7 @@ def generate_launch_description():
                 "use_sim_time": use_sim_time,
                 "vehicle_prefix": vehicle_prefix,
                 "map_frame": map_frame,
-                "base_frame": base_frame,
+                "base_frame": robot_base_frame,
                 "goal_topic": PythonExpression(["'/", vehicle_prefix, "/goal_pose'"]),
                 "planner_action": PythonExpression(
                     ["'/", vehicle_prefix, "/compute_path_to_pose'"]

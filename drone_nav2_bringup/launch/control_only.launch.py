@@ -12,7 +12,6 @@ from nav2_common.launch import RewrittenYaml
 
 def generate_launch_description():
     """Create the command-only MAV1 Nav2 control graph."""
-
     bringup_share = get_package_share_directory("drone_nav2_bringup")
     arena_share = get_package_share_directory("drone_nav2_apriltag")
 
@@ -22,12 +21,15 @@ def generate_launch_description():
     map_yaml = LaunchConfiguration("map_yaml")
     px4_topic = LaunchConfiguration("px4_topic")
     odom_topic = LaunchConfiguration("odom_topic")
+    robot_base_frame = LaunchConfiguration("robot_base_frame")
+    robot_radius = LaunchConfiguration("robot_radius")
+    inflation_radius = LaunchConfiguration("inflation_radius")
+    cmd_vel_topic = LaunchConfiguration("cmd_vel_topic")
     planner_plugin = LaunchConfiguration("planner_plugin")
     use_sim_time = LaunchConfiguration("use_sim_time")
     gazebo_clock_topic = LaunchConfiguration("gazebo_clock_topic")
     rviz = LaunchConfiguration("rviz")
     rviz_config = LaunchConfiguration("rviz_config")
-    odom_frame = PythonExpression(["'", vehicle_prefix, "/odom'"])
     base_frame = PythonExpression(["'", vehicle_prefix, "/base_link'"])
 
     control_params = ParameterFile(
@@ -37,7 +39,9 @@ def generate_launch_description():
             param_rewrites={
                 "use_sim_time": use_sim_time,
                 "global_frame": map_frame,
-                "robot_base_frame": base_frame,
+                "robot_base_frame": robot_base_frame,
+                "robot_radius": robot_radius,
+                "inflation_radius": inflation_radius,
                 "odom_topic": odom_topic,
                 "map_topic": "/map",
             },
@@ -58,6 +62,10 @@ def generate_launch_description():
             default_value="/MAV1/fmu/out/vehicle_local_position_v1",
         ),
         DeclareLaunchArgument("odom_topic", default_value="/MAV1/odom"),
+        DeclareLaunchArgument("robot_base_frame", default_value=base_frame),
+        DeclareLaunchArgument("robot_radius", default_value="0.4"),
+        DeclareLaunchArgument("inflation_radius", default_value="0.75"),
+        DeclareLaunchArgument("cmd_vel_topic", default_value="cmd_vel"),
         DeclareLaunchArgument(
             "planner_plugin", default_value="nav2_navfn_planner/NavfnPlanner"
         ),
@@ -83,6 +91,9 @@ def generate_launch_description():
             "map_yaml": map_yaml,
             "px4_topic": px4_topic,
             "odom_topic": odom_topic,
+            "robot_base_frame": robot_base_frame,
+            "robot_radius": robot_radius,
+            "inflation_radius": inflation_radius,
             "planner_plugin": planner_plugin,
             "spawn_x": LaunchConfiguration("spawn_x"),
             "spawn_y": LaunchConfiguration("spawn_y"),
@@ -101,6 +112,7 @@ def generate_launch_description():
         namespace=vehicle_namespace,
         output="screen",
         parameters=[control_params],
+        remappings=[("cmd_vel", cmd_vel_topic)],
     )
 
     bt_navigator = Node(

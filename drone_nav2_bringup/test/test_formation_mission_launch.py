@@ -58,7 +58,7 @@ class FormationMissionLaunchTest(unittest.TestCase):
         cls.node.destroy_node()
         rclpy.shutdown()
         os.killpg(cls.process.pid, signal.SIGINT)
-        cls.process.wait(timeout=8.0)
+        cls.process.wait(timeout=15.0)
 
     def test_leader_owns_nav2_and_followers_own_controller_seams(self):
         deadline = time.monotonic() + 15.0
@@ -164,12 +164,25 @@ class FormationMissionLaunchTest(unittest.TestCase):
         )
         self.assertEqual(int(self.formation_center_enabled), len(physical_publishers))
         mav1_publishers = self.node.get_publishers_info_by_topic("/MAV1/cmd_vel")
-        self.assertEqual(1, len(mav1_publishers))
-        self.assertEqual("controller_server", mav1_publishers[0].node_name)
+        virtual_publishers = self.node.get_publishers_info_by_topic(
+            "/MAV1/formation_center/cmd_vel"
+        )
+        if self.formation_center_enabled:
+            self.assertEqual([], mav1_publishers)
+            self.assertEqual(1, len(virtual_publishers))
+            self.assertEqual("controller_server", virtual_publishers[0].node_name)
+            consumers = self.node.get_subscriptions_info_by_topic(
+                "/MAV1/formation_center/physical_cmd_vel"
+            )
+            self.assertEqual(1, len(consumers))
+            self.assertEqual("cmd_vel_to_px4_offboard_bridge", consumers[0].node_name)
+        else:
+            self.assertEqual([], virtual_publishers)
+            self.assertEqual(1, len(mav1_publishers))
+            self.assertEqual("controller_server", mav1_publishers[0].node_name)
 
     def test_follower_mppi_lifecycles_are_active(self):
         """Each follower local-control owner activates its only controller."""
-
         for follower in ("MAV2", "MAV3"):
             client = self.node.create_client(
                 GetState, f"/{follower}/follower_mppi_controller_server/get_state"

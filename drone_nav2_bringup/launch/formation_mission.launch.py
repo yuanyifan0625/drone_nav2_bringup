@@ -14,7 +14,6 @@ def _follower_odometry_and_tf(
     *, bringup_share: str, vehicle_namespace: str, spawn_x: str, spawn_y: str
 ):
     """Return the minimal map-aligned odometry graph for a non-Nav2 follower."""
-
     use_sim_time = LaunchConfiguration("use_sim_time")
     return [
         Node(
@@ -51,9 +50,10 @@ def _follower_odometry_and_tf(
     ]
 
 
-def _px4_bridge(vehicle_namespace: str, target_system: int) -> Node:
+def _px4_bridge(
+    vehicle_namespace: str, target_system: int, cmd_vel_topic=None
+) -> Node:
     """Create the only PX4 input authority for one vehicle."""
-
     return Node(
         package="drone_px4_nav2_bridge",
         executable="cmd_vel_to_px4_offboard_bridge",
@@ -64,6 +64,7 @@ def _px4_bridge(vehicle_namespace: str, target_system: int) -> Node:
             {
                 "vehicle_namespace": vehicle_namespace,
                 "target_system": target_system,
+                "cmd_vel_topic": cmd_vel_topic or f"/{vehicle_namespace}/cmd_vel",
                 "flight_level": LaunchConfiguration("flight_level"),
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
             }
@@ -73,7 +74,6 @@ def _px4_bridge(vehicle_namespace: str, target_system: int) -> Node:
 
 def _follower_controller(vehicle_namespace: str, slot_forward, slot_left) -> Node:
     """Create one vehicle-scoped Fixed V-Slot controller."""
-
     return Node(
         package="drone_nav2_bringup",
         executable="fixed_slot_follower_controller.py",
@@ -95,7 +95,6 @@ def _follower_controller(vehicle_namespace: str, slot_forward, slot_left) -> Nod
 
 def _follower_local_control(bringup_share: str, vehicle_namespace: str):
     """Return one follower's sole local controller, owner, and path adapter."""
-
     use_sim_time = LaunchConfiguration("use_sim_time")
     fov_guard = LaunchConfiguration("fov_guard")
     fov_guard_enabled = PythonExpression(
@@ -132,7 +131,11 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
         Node(
             package="drone_nav2_bringup", executable="follower_path_adapter.py",
             name="follower_path_adapter", namespace=vehicle_namespace, output="screen",
-            parameters=[{"target_update_threshold": 0.10, "minimum_replacement_interval": 0.20, "use_sim_time": use_sim_time}],
+            parameters=[{
+                "target_update_threshold": 0.10,
+                "minimum_replacement_interval": 0.20,
+                "use_sim_time": use_sim_time,
+            }],
         ),
         Node(
             package="drone_nav2_bringup", executable="follower_fov_motion_guard.py",
@@ -144,19 +147,48 @@ def _follower_local_control(bringup_share: str, vehicle_namespace: str):
             package="drone_nav2_bringup", executable="cooperative_obstacle_publisher.py",
             name="cooperative_obstacle_publisher", namespace=vehicle_namespace,
             output="screen",
-            parameters=[{"vehicle_namespace": vehicle_namespace, "excluded_vehicles": ["MAV1"], "use_sim_time": use_sim_time}],
+            parameters=[{
+                "vehicle_namespace": vehicle_namespace,
+                "excluded_vehicles": ["MAV1"],
+                "use_sim_time": use_sim_time,
+            }],
         ),
     ]
 
 
 def generate_launch_description():
     """Start MAV1 Nav2 and only odometry/follower control for MAV2/MAV3."""
-
     bringup_share = get_package_share_directory("drone_nav2_bringup")
     arena_share = get_package_share_directory("drone_nav2_apriltag")
     use_sim_time = LaunchConfiguration("use_sim_time")
     flight_level = LaunchConfiguration("flight_level")
     formation_center_enabled = LaunchConfiguration("formation_center_enabled")
+    formation_envelope_radius = LaunchConfiguration("formation_envelope_radius")
+    nav2_base_frame = PythonExpression(
+        ["'MAV1/formation_center' if '", formation_center_enabled,
+         "'.lower() in ('true', '1') else 'MAV1/base_link'"]
+    )
+    nav2_odom_topic = PythonExpression(
+        ["'/MAV1/formation_center/map_odom' if '", formation_center_enabled,
+         "'.lower() in ('true', '1') else '/MAV1/odom'"]
+    )
+    nav2_cmd_vel_topic = PythonExpression(
+        ["'formation_center/cmd_vel' if '", formation_center_enabled,
+         "'.lower() in ('true', '1') else 'cmd_vel'"]
+    )
+    bridge_cmd_vel_topic = PythonExpression(
+        ["'/MAV1/formation_center/physical_cmd_vel' if '",
+         formation_center_enabled,
+         "'.lower() in ('true', '1') else '/MAV1/cmd_vel'"]
+    )
+    nav2_robot_radius = PythonExpression(
+        [formation_envelope_radius, " if '", formation_center_enabled,
+         "'.lower() in ('true', '1') else 0.4"]
+    )
+    nav2_inflation_radius = PythonExpression(
+        [formation_envelope_radius, " if '", formation_center_enabled,
+         "'.lower() in ('true', '1') else 0.75"]
+    )
     leader_control = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             f"{bringup_share}/launch/control_only.launch.py"
@@ -165,7 +197,11 @@ def generate_launch_description():
             "vehicle_namespace": "MAV1",
             "vehicle_prefix": "MAV1",
             "px4_topic": "/MAV1/fmu/out/vehicle_local_position_v1",
-            "odom_topic": "/MAV1/odom",
+            "odom_topic": nav2_odom_topic,
+            "robot_base_frame": nav2_base_frame,
+            "robot_radius": nav2_robot_radius,
+            "inflation_radius": nav2_inflation_radius,
+            "cmd_vel_topic": nav2_cmd_vel_topic,
             "spawn_x": "-2.0",
             "spawn_y": "0.0",
             "use_sim_time": use_sim_time,
@@ -248,27 +284,36 @@ def generate_launch_description():
             DeclareLaunchArgument("minimum_separation", default_value="0.7"),
             DeclareLaunchArgument("telemetry_timeout", default_value="0.5"),
             DeclareLaunchArgument("fov_guard", default_value="false"),
-            DeclareLaunchArgument("formation_center_enabled", default_value="false"),
+            DeclareLaunchArgument("formation_center_enabled", default_value="true"),
+            DeclareLaunchArgument("formation_envelope_radius", default_value="1.45"),
             DeclareLaunchArgument("formation_vehicle_radius", default_value="0.4"),
             DeclareLaunchArgument("formation_safety_margin", default_value="0.2"),
             DeclareLaunchArgument(
                 "formation_envelope_rounding_increment", default_value="0.05"
             ),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
-            DeclareLaunchArgument("gazebo_clock_topic", default_value="/world/nav2_arena/clock"),
+            DeclareLaunchArgument(
+                "gazebo_clock_topic", default_value="/world/nav2_arena/clock"
+            ),
             DeclareLaunchArgument("rviz", default_value="false"),
             leader_control,
             depth_sensors,
             *_follower_odometry_and_tf(
-                bringup_share=bringup_share, vehicle_namespace="MAV2", spawn_x="-2.0", spawn_y="3.0"
+                bringup_share=bringup_share,
+                vehicle_namespace="MAV2",
+                spawn_x="-2.0",
+                spawn_y="3.0",
             ),
             *_follower_odometry_and_tf(
-                bringup_share=bringup_share, vehicle_namespace="MAV3", spawn_x="-2.0", spawn_y="-3.0"
+                bringup_share=bringup_share,
+                vehicle_namespace="MAV3",
+                spawn_x="-2.0",
+                spawn_y="-3.0",
             ),
             goal_adapter,
             manager,
             formation_center,
-            _px4_bridge("MAV1", 1),
+            _px4_bridge("MAV1", 1, bridge_cmd_vel_topic),
             _px4_bridge("MAV2", 2),
             _px4_bridge("MAV3", 3),
             _follower_controller(
