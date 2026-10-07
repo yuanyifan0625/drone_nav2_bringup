@@ -40,7 +40,12 @@ def test_followers_configure_the_same_formation_heading_costs() -> None:
     ]
     expected_settings = {
         "ConstraintCritic": {"cost_weight": 4.0},
-        "ObstaclesCritic": {"repulsion_weight": 0.4, "critical_weight": 20.0},
+        "ObstaclesCritic": {
+            "repulsion_weight": 0.4,
+            "critical_weight": 20.0,
+            "inflation_radius": 0.9,
+            "cost_scaling_factor": 3.0,
+        },
         "GoalCritic": {"cost_weight": 5.0, "threshold_to_consider": 2.1},
         "GoalAngleCritic": {"cost_weight": 3.0, "threshold_to_consider": 2.5},
     }
@@ -78,3 +83,15 @@ def test_followers_overlay_the_shared_static_map() -> None:
             "map_topic": "/map",
             "map_subscribe_transient_local": True,
         }
+
+
+def test_followers_share_the_costmap_inflation_contract_with_mppi() -> None:
+    """Humble MPPI must decode the same inflation field the costmap publishes."""
+    for vehicle in ("MAV2", "MAV3"):
+        obstacle_critic = _follow_path_config(vehicle)["ObstaclesCritic"]
+        inflation_layer = _local_costmap_parameters(vehicle)["inflation_layer"]
+        assert obstacle_critic["inflation_radius"] == inflation_layer["inflation_radius"]
+        assert (
+            obstacle_critic["cost_scaling_factor"]
+            == inflation_layer["cost_scaling_factor"]
+        )
