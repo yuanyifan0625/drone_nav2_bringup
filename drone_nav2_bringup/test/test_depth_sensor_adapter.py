@@ -15,6 +15,7 @@ _SPEC = importlib.util.spec_from_file_location("depth_sensor_adapter", _SCRIPT)
 assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
+filter_and_clear_pointcloud_known_vehicles = _MODULE.filter_and_clear_pointcloud_known_vehicles
 filter_known_vehicle_points = _MODULE.filter_known_vehicle_points
 filter_pointcloud_known_vehicles = _MODULE.filter_pointcloud_known_vehicles
 fresh_odometry_for_cloud = _MODULE.fresh_odometry_for_cloud
@@ -188,3 +189,30 @@ def test_pointcloud_filter_drops_no_occluded_or_ambiguous_ray() -> None:
         value for point in struct.iter_unpack("<fff", filtered.data) for value in point
     ]
     assert actual == pytest.approx([*wall_edge, *occluded])
+
+
+def test_teammate_clearing_ray_stops_at_known_body_exit() -> None:
+    teammate_surface = (0.86767, 0.0, -0.26078)
+    wall_edge = (0.86767, 0.50, -0.26078)
+    occluded_obstacle = (1.50, 0.0, -0.26078)
+
+    filtered, clearing = filter_and_clear_pointcloud_known_vehicles(
+        _cloud([teammate_surface, wall_edge, occluded_obstacle]),
+        self_odom=_odom(0.0, 0.0),
+        peer_odoms=[_odom(1.0, 0.0)],
+        camera_offset=(0.13233, 0.0, 0.26078),
+        xy_half_extent=0.315,
+        z_bounds=(-0.25, 0.12),
+        tolerance=0.05,
+    )
+
+    assert filtered.width == 2
+    assert clearing.width == 1
+    clear_x, clear_y, clear_z = struct.unpack("<fff", clearing.data)
+    assert clear_x > teammate_surface[0]
+    assert clear_x + 0.13233 == pytest.approx(1.365, abs=1e-5)
+    assert clear_x < occluded_obstacle[0]
+    assert clear_y == pytest.approx(0.0, abs=1e-6)
+    assert clear_z / clear_x == pytest.approx(
+        teammate_surface[2] / teammate_surface[0], abs=1e-6
+    )

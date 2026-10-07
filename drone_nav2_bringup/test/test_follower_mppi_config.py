@@ -72,6 +72,22 @@ def test_followers_accept_obstacles_at_flight_level() -> None:
             assert obstacle_layer["cooperative_obstacles"][parameter] == value
 
 
+def test_teammate_depth_source_clears_without_marking() -> None:
+    for vehicle in ("MAV2", "MAV3"):
+        obstacle_layer = _local_costmap_parameters(vehicle)["obstacle_layer"]
+        source = obstacle_layer["depth_teammate_clearing"]
+        assert "depth_teammate_clearing" in obstacle_layer["observation_sources"]
+        assert source == {
+            "topic": f"/{vehicle}/depth/teammate_clearing_points",
+            "data_type": "PointCloud2",
+            "marking": False,
+            "clearing": True,
+            "raytrace_max_range": 2.0,
+            "min_obstacle_height": 0.0,
+            "max_obstacle_height": 10.0,
+        }
+
+
 def test_followers_overlay_the_shared_static_map() -> None:
     for vehicle in ("MAV2", "MAV3"):
         costmap = _local_costmap_parameters(vehicle)

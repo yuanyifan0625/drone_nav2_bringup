@@ -73,7 +73,7 @@ def _rotation_matrix(orientation):
     ).T
 
 
-def _known_vehicle_mask(
+def _known_vehicle_mask_and_clearing_points(
     points,
     *,
     self_odom,
@@ -84,12 +84,19 @@ def _known_vehicle_mask(
     tolerance,
 ):
     if not len(points):
-        return np.zeros(0, dtype=bool)
+        return np.zeros(0, dtype=bool), points
     self_pose = self_odom.pose.pose
     self_rotation = _rotation_matrix(self_pose.orientation).astype(
         points.dtype, copy=False
     )
     attributable = np.zeros(len(points), dtype=bool)
+    clearing_scale = np.zeros(len(points), dtype=points.dtype)
+    lower_bounds = np.asarray(
+        [-xy_half_extent, -xy_half_extent, z_bounds[0]], dtype=points.dtype
+    ) - tolerance
+    upper_bounds = np.asarray(
+        [xy_half_extent, xy_half_extent, z_bounds[1]], dtype=points.dtype
+    ) + tolerance
     for peer_odom in peer_odoms:
         peer_pose = peer_odom.pose.pose
         peer_rotation = _rotation_matrix(peer_pose.orientation).astype(
@@ -108,31 +115,33 @@ def _known_vehicle_mask(
             )
             @ peer_rotation
         )
-        x = (
-            points[:, 0] * transform[0, 0]
-            + points[:, 1] * transform[1, 0]
-            + points[:, 2] * transform[2, 0]
-            + translation[0]
+        directions = points @ transform
+        transformed = directions + translation
+        inside = np.all(
+            (transformed >= lower_bounds) & (transformed <= upper_bounds), axis=1
         )
-        y = (
-            points[:, 0] * transform[0, 1]
-            + points[:, 1] * transform[1, 1]
-            + points[:, 2] * transform[2, 1]
-            + translation[1]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            far_scale = np.where(
+                directions > 0.0,
+                (upper_bounds - translation) / directions,
+                np.where(
+                    directions < 0.0,
+                    (lower_bounds - translation) / directions,
+                    np.inf,
+                ),
+            ).min(axis=1)
+        valid_exit = inside & np.isfinite(far_scale) & (far_scale >= 1.0)
+        clearing_scale = np.maximum(
+            clearing_scale, np.where(valid_exit, far_scale, 0.0)
         )
-        z = (
-            points[:, 0] * transform[0, 2]
-            + points[:, 1] * transform[1, 2]
-            + points[:, 2] * transform[2, 2]
-            + translation[2]
-        )
-        attributable |= (
-            (np.abs(x) <= xy_half_extent + tolerance)
-            & (np.abs(y) <= xy_half_extent + tolerance)
-            & (z >= z_bounds[0] - tolerance)
-            & (z <= z_bounds[1] + tolerance)
-        )
-    return attributable
+        attributable |= inside
+    has_clearing_ray = clearing_scale > 0.0
+    clearing_points = points[has_clearing_ray] * clearing_scale[has_clearing_ray, None]
+    return attributable, clearing_points
+
+
+def _known_vehicle_mask(points, **kwargs):
+    return _known_vehicle_mask_and_clearing_points(points, **kwargs)[0]
 
 
 def filter_known_vehicle_points(
@@ -159,7 +168,7 @@ def filter_known_vehicle_points(
     return [tuple(point) for point in point_array[~attributable]]
 
 
-def filter_pointcloud_known_vehicles(
+def filter_and_clear_pointcloud_known_vehicles(
     message: PointCloud2,
     *,
     self_odom: Odometry,
@@ -168,13 +177,13 @@ def filter_pointcloud_known_vehicles(
     xy_half_extent: float,
     z_bounds: tuple[float, float],
     tolerance: float,
-) -> PointCloud2:
-    """Return an XYZ cloud without time-aligned known-vehicle returns."""
+) -> tuple[PointCloud2, PointCloud2]:
+    """Return filtered marking points and bounded clearing-only rays."""
     points = point_cloud2.read_points_numpy(
         message, field_names=["x", "y", "z"], skip_nans=True
     )
     finite_points = points[np.isfinite(points).all(axis=1)]
-    attributable = _known_vehicle_mask(
+    attributable, clearing_points = _known_vehicle_mask_and_clearing_points(
         finite_points,
         self_odom=self_odom,
         peer_odoms=peer_odoms,
@@ -184,7 +193,16 @@ def filter_pointcloud_known_vehicles(
         tolerance=tolerance,
     )
     kept = finite_points[~attributable].astype(np.float32, copy=False)
-    return point_cloud2.create_cloud_xyz32(deepcopy(message.header), kept)
+    clearing_points = clearing_points.astype(np.float32, copy=False)
+    return (
+        point_cloud2.create_cloud_xyz32(deepcopy(message.header), kept),
+        point_cloud2.create_cloud_xyz32(deepcopy(message.header), clearing_points),
+    )
+
+
+def filter_pointcloud_known_vehicles(message: PointCloud2, **kwargs) -> PointCloud2:
+    """Return an XYZ cloud without time-aligned known-vehicle returns."""
+    return filter_and_clear_pointcloud_known_vehicles(message, **kwargs)[0]
 
 
 class DepthSensorAdapter(Node):
@@ -242,6 +260,9 @@ class DepthSensorAdapter(Node):
         self._points_publisher = self.create_publisher(
             PointCloud2, "depth/points", qos_profile_sensor_data
         )
+        self._clearing_publisher = self.create_publisher(
+            PointCloud2, "depth/teammate_clearing_points", qos_profile_sensor_data
+        )
         self.create_subscription(
             Image, str(image_input), self._relay_image, qos_profile_sensor_data
         )
@@ -277,6 +298,9 @@ class DepthSensorAdapter(Node):
 
     def _relay_points(self, message: PointCloud2) -> None:
         output = message
+        clearing = point_cloud2.create_cloud_xyz32(
+            deepcopy(message.header), np.empty((0, 3), dtype=np.float32)
+        )
         if self._filtered_vehicles:
             now_ns = self.get_clock().now().nanoseconds
             cloud_stamp_ns = _stamp_ns(message.header.stamp)
@@ -297,7 +321,7 @@ class DepthSensorAdapter(Node):
                 tolerance=self._odometry_tolerance,
             )
             if self_odometry and peer_odometry:
-                output = filter_pointcloud_known_vehicles(
+                output, clearing = filter_and_clear_pointcloud_known_vehicles(
                     message,
                     self_odom=self_odometry[0],
                     peer_odoms=peer_odometry,
@@ -307,7 +331,9 @@ class DepthSensorAdapter(Node):
                     tolerance=self._geometry_tolerance,
                 )
         output.header.frame_id = self._frame_id
+        clearing.header.frame_id = self._frame_id
         self._points_publisher.publish(output)
+        self._clearing_publisher.publish(clearing)
 
 
 def main() -> None:
