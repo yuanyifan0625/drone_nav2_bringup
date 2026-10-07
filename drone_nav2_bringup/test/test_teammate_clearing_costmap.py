@@ -74,7 +74,7 @@ class TeammateClearingCostmapTest(unittest.TestCase):
                             "min_obstacle_height": -1.0,
                             "max_obstacle_height": 1.0,
                             "obstacle_max_range": 2.0,
-                            "observation_persistence": 5.0,
+                            "observation_persistence": 0.0,
                         },
                     },
                 }
