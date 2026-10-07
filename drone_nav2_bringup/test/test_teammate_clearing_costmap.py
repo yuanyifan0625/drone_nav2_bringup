@@ -174,19 +174,21 @@ class TeammateClearingCostmapTest(unittest.TestCase):
         return point_cloud2.create_cloud_xyz32(header, points)
 
     @classmethod
-    def _publish_until(cls, predicate, depth, clearing=(), timeout=5.0):
-        protected = [(1.0, 0.5, 0.1), (1.5, 0.0, 0.1)]
+    def _publish_until(
+        cls, predicate, depth, clearing=(), protected=None, timeout=5.0
+    ):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             cls.depth.publish(cls._cloud(depth))
             cls.clearing.publish(cls._cloud(clearing))
-            cls.protected.publish(cls._cloud(protected))
+            if protected is not None:
+                cls.protected.publish(cls._cloud(protected))
             rclpy.spin_once(cls.node, timeout_sec=0.05)
             if cls.costmap is not None and predicate():
                 return
         sample = {
             point: cls._cost(*point)
-            for point in ((1.0, 0.0), (1.0, 0.5), (1.5, 0.0))
+            for point in ((1.0, 0.0), (1.0, 0.5), (1.35, 0.0))
         }
         raise AssertionError(
             f"Costmap cells did not reach expected state: {sample}; "
@@ -202,17 +204,22 @@ class TeammateClearingCostmapTest(unittest.TestCase):
 
     def test_stale_then_fresh_and_moved_teammate_marks_are_bounded(self):
         self._publish_until(
-            lambda: self._cost(1.0, 0.0) == 100,
+            lambda: (
+                self._cost(1.0, 0.0) == 100
+                and self._cost(1.0, 0.5) == 100
+                and self._cost(1.35, 0.0) == 100
+            ),
             depth=[(1.0, 0.0, 0.1)],
+            protected=[(1.0, 0.5, 0.1), (1.35, 0.0, 0.1)],
         )
         self._publish_until(
             lambda: (
                 self._cost(1.0, 0.0) == 0
                 and self._cost(1.0, 0.5) == 100
-                and self._cost(1.5, 0.0) == 100
+                and self._cost(1.35, 0.0) == 100
             ),
             depth=[],
-            clearing=[(1.365, 0.0, 0.1)],
+            clearing=[(1.315, 0.0, 0.1)],
         )
 
         moved = (1.725, -0.775, 0.1)
@@ -229,4 +236,4 @@ class TeammateClearingCostmapTest(unittest.TestCase):
             depth=[out_of_range],
         )
         self.assertEqual(self._cost(1.0, 0.5), 100)
-        self.assertEqual(self._cost(1.5, 0.0), 100)
+        self.assertEqual(self._cost(1.35, 0.0), 100)

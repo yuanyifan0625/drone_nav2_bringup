@@ -81,7 +81,6 @@ def _known_vehicle_mask_and_clearing_points(
     camera_offset,
     xy_half_extent,
     z_bounds,
-    tolerance,
 ):
     if not len(points):
         return np.zeros(0, dtype=bool), points
@@ -93,10 +92,10 @@ def _known_vehicle_mask_and_clearing_points(
     clearing_scale = np.zeros(len(points), dtype=points.dtype)
     lower_bounds = np.asarray(
         [-xy_half_extent, -xy_half_extent, z_bounds[0]], dtype=points.dtype
-    ) - tolerance
+    )
     upper_bounds = np.asarray(
         [xy_half_extent, xy_half_extent, z_bounds[1]], dtype=points.dtype
-    ) + tolerance
+    )
     for peer_odom in peer_odoms:
         peer_pose = peer_odom.pose.pose
         peer_rotation = _rotation_matrix(peer_pose.orientation).astype(
@@ -152,7 +151,6 @@ def filter_known_vehicle_points(
     camera_offset: tuple[float, float, float],
     xy_half_extent: float,
     z_bounds: tuple[float, float],
-    tolerance: float,
 ) -> list[tuple[float, float, float]]:
     """Remove only depth returns inside a time-aligned known vehicle body."""
     point_array = np.asarray(points, dtype=float).reshape((-1, 3))
@@ -163,7 +161,6 @@ def filter_known_vehicle_points(
         camera_offset=camera_offset,
         xy_half_extent=xy_half_extent,
         z_bounds=z_bounds,
-        tolerance=tolerance,
     )
     return [tuple(point) for point in point_array[~attributable]]
 
@@ -176,7 +173,6 @@ def filter_and_clear_pointcloud_known_vehicles(
     camera_offset: tuple[float, float, float],
     xy_half_extent: float,
     z_bounds: tuple[float, float],
-    tolerance: float,
 ) -> tuple[PointCloud2, PointCloud2]:
     """Return filtered marking points and bounded clearing-only rays."""
     points = point_cloud2.read_points_numpy(
@@ -190,7 +186,6 @@ def filter_and_clear_pointcloud_known_vehicles(
         camera_offset=camera_offset,
         xy_half_extent=xy_half_extent,
         z_bounds=z_bounds,
-        tolerance=tolerance,
     )
     kept = finite_points[~attributable].astype(np.float32, copy=False)
     clearing_points = clearing_points.astype(np.float32, copy=False)
@@ -242,9 +237,6 @@ class DepthSensorAdapter(Node):
             for value in self.declare_parameter(
                 "vehicle_z_bounds", [-0.25, 0.12]
             ).value
-        )
-        self._geometry_tolerance = float(
-            self.declare_parameter("vehicle_geometry_tolerance", 0.05).value
         )
         self._odometry_tolerance = float(
             self.declare_parameter("odometry_tolerance", 0.1).value
@@ -328,7 +320,6 @@ class DepthSensorAdapter(Node):
                     camera_offset=self._camera_offset,
                     xy_half_extent=self._vehicle_xy_half_extent,
                     z_bounds=self._vehicle_z_bounds,
-                    tolerance=self._geometry_tolerance,
                 )
         output.header.frame_id = self._frame_id
         clearing.header.frame_id = self._frame_id

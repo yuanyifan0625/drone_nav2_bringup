@@ -68,7 +68,6 @@ def test_only_points_attributable_to_a_known_vehicle_are_removed() -> None:
         camera_offset=(0.13233, 0.0, 0.26078),
         xy_half_extent=0.315,
         z_bounds=(-0.25, 0.12),
-        tolerance=0.05,
     )
 
     assert filtered == [points[1], points[2]]
@@ -82,7 +81,6 @@ def test_moving_vehicle_updates_mask_without_residual_points() -> None:
         "camera_offset": (0.13233, 0.0, 0.26078),
         "xy_half_extent": 0.315,
         "z_bounds": (-0.25, 0.12),
-        "tolerance": 0.05,
     }
 
     assert filter_known_vehicle_points(
@@ -108,7 +106,6 @@ def test_vehicle_filter_respects_self_and_peer_orientation() -> None:
         camera_offset=(0.13233, 0.0, 0.26078),
         xy_half_extent=0.315,
         z_bounds=(-0.25, 0.12),
-        tolerance=0.05,
     )
 
     assert filtered == [outside]
@@ -142,7 +139,6 @@ def test_missing_or_stale_odometry_preserves_depth_points() -> None:
         camera_offset=(0.13233, 0.0, 0.26078),
         xy_half_extent=0.315,
         z_bounds=(-0.25, 0.12),
-        tolerance=0.05,
     ) == [point]
 
 
@@ -179,7 +175,6 @@ def test_pointcloud_filter_drops_no_occluded_or_ambiguous_ray() -> None:
         camera_offset=(0.13233, 0.0, 0.26078),
         xy_half_extent=0.315,
         z_bounds=(-0.25, 0.12),
-        tolerance=0.05,
     )
 
     assert filtered.height == 1
@@ -193,25 +188,27 @@ def test_pointcloud_filter_drops_no_occluded_or_ambiguous_ray() -> None:
 
 def test_teammate_clearing_ray_stops_at_known_body_exit() -> None:
     teammate_surface = (0.86767, 0.0, -0.26078)
+    tolerance_shell_obstacle = (1.20767, 0.0, -0.26078)
     wall_edge = (0.86767, 0.50, -0.26078)
     occluded_obstacle = (1.50, 0.0, -0.26078)
 
     filtered, clearing = filter_and_clear_pointcloud_known_vehicles(
-        _cloud([teammate_surface, wall_edge, occluded_obstacle]),
+        _cloud(
+            [teammate_surface, tolerance_shell_obstacle, wall_edge, occluded_obstacle]
+        ),
         self_odom=_odom(0.0, 0.0),
         peer_odoms=[_odom(1.0, 0.0)],
         camera_offset=(0.13233, 0.0, 0.26078),
         xy_half_extent=0.315,
         z_bounds=(-0.25, 0.12),
-        tolerance=0.05,
     )
 
-    assert filtered.width == 2
+    assert filtered.width == 3
     assert clearing.width == 1
     clear_x, clear_y, clear_z = struct.unpack("<fff", clearing.data)
     assert clear_x > teammate_surface[0]
-    assert clear_x + 0.13233 == pytest.approx(1.365, abs=1e-5)
-    assert clear_x < occluded_obstacle[0]
+    assert clear_x + 0.13233 == pytest.approx(1.315, abs=1e-5)
+    assert clear_x < tolerance_shell_obstacle[0]
     assert clear_y == pytest.approx(0.0, abs=1e-6)
     assert clear_z / clear_x == pytest.approx(
         teammate_surface[2] / teammate_surface[0], abs=1e-6
