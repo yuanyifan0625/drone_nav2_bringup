@@ -24,6 +24,11 @@ def _vehicle_depth_nodes(vehicle_namespace: str, model_name: str):
     camera_info_topic = _gazebo_topic(model_name, "camera_info")
     points_topic = _gazebo_topic(model_name, "depth_image/points")
     frame_id = f"{vehicle_namespace}/depth_camera_link"
+    filtered_vehicles = {
+        "MAV1": [""],
+        "MAV2": ["MAV1", "MAV3"],
+        "MAV3": ["MAV1", "MAV2"],
+    }[vehicle_namespace]
     return [
         Node(
             package="ros_gz_bridge",
@@ -52,6 +57,9 @@ def _vehicle_depth_nodes(vehicle_namespace: str, model_name: str):
             parameters=[
                 {
                     "frame_id": frame_id,
+                    "vehicle_namespace": vehicle_namespace,
+                    "filtered_vehicles": filtered_vehicles,
+                    "camera_offset": [float(value) for value in CAMERA_POSE],
                     "use_sim_time": LaunchConfiguration("use_sim_time"),
                 }
             ],
@@ -74,7 +82,6 @@ def _vehicle_depth_nodes(vehicle_namespace: str, model_name: str):
 
 def generate_launch_description():
     """Expose depth image, camera info, points, and TF for all three vehicles."""
-
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_sim_time", default_value="true"),

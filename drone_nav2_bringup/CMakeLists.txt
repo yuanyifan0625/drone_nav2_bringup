@@ -67,6 +67,10 @@ if(BUILD_TESTING)
     ENV ROS_DOMAIN_ID=115
   )
   ament_add_pytest_test(
+    test_depth_sensor_adapter test/test_depth_sensor_adapter.py
+    ENV ROS_DOMAIN_ID=121
+  )
+  ament_add_pytest_test(
     test_fixed_slot_follower_controller_launch test/test_fixed_slot_follower_controller_launch.py
     ENV ROS_DOMAIN_ID=112
   )
